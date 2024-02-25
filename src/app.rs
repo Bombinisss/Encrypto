@@ -80,7 +80,7 @@ impl eframe::App for EncryptoInterface {
             ui.separator();
 
             ui.add(egui::github_link_file!(
-                "https://github.com/bombini/Encrypto/",
+                "https://github.com/bombinisss/Encrypto/",
                 "Source code."
             ));
 
