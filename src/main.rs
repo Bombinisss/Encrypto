@@ -8,11 +8,15 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([400.0, 300.0])
             .with_min_inner_size([300.0, 220.0])
+            .with_transparent(true) // To have rounded corners we need transparency
+            .with_decorations(false) // Hide the OS-specific "chrome" around the window
             .with_icon(
                 // NOE: Adding an icon is optional
                 eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-1024.png")[..])
                     .unwrap(),
             ),
+        follow_system_theme:
+            true,
         ..Default::default()
     };
     eframe::run_native(
