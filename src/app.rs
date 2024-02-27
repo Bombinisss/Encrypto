@@ -1,3 +1,6 @@
+use std::thread;
+use crate::thread::encrypt_test;
+
 /// We derive Deserialize/Serialize, so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -97,6 +100,15 @@ impl eframe::App for EncryptoInterface {
                 ui.label("     ");
                 toggle_ui(ui, &mut self.encryption_state);
             });
+
+            if ui.button("Test Encrypt").clicked() {
+
+                let data = "test".to_string();
+
+                thread::spawn(move || {
+                    encrypt_test(data)
+                });
+            }
 
             ui.separator();
 
@@ -246,7 +258,7 @@ pub fn toggle_ui(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
         // "how should something that is being interacted with be painted?".
         // This will, for instance, give us different colors when the widget is hovered or clicked.
         let visuals = ui.style().interact_selectable(&response, *on);
-        // All coordinates are in absolute screen coordinates so we use `rect` to place the elements.
+        // All coordinates are in absolute screen coordinates, so we use `rect` to place the elements.
         let rect = rect.expand(visuals.expansion);
         let radius = 0.5 * rect.height();
         ui.painter()

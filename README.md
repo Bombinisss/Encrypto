@@ -6,6 +6,6 @@
 
 Simple app written in rust for encrypting and decrypting specified directory.
 
-### Depediencies
+### Dependencies
 
 Made using [eframe](https://github.com/emilk/egui/tree/master/crates/eframe), a framework for writing apps using [egui](https://github.com/emilk/egui/).
