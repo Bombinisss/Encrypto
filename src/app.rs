@@ -1,5 +1,6 @@
 use std::thread;
 use crate::thread::encrypt_test;
+use std::sync::{Arc};
 
 /// We derive Deserialize/Serialize, so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -8,7 +9,9 @@ pub struct EncryptoInterface {
     // Example stuff:
     label: String,
     temp_label: String,
+    temp_label2: String,
     encryption_state: bool,
+    encryption_key: String,
 
     #[serde(skip)] // This how you opt out of serialization of a field
     value: f32,
@@ -18,10 +21,12 @@ impl Default for EncryptoInterface {
     fn default() -> Self {
         Self {
             // Example stuff:
-            label: "Hello World!".to_owned(),
-            temp_label: "Temp".to_owned(),
+            label: "".to_owned(),
+            temp_label: "".to_owned(),
+            temp_label2: "".to_owned(),
             encryption_state: false,
             value: 2.7,
+            encryption_key: "".to_owned(),
         }
     }
 }
@@ -75,38 +80,57 @@ impl eframe::App for EncryptoInterface {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
-            ui.heading("Enter path to encrypt:");
+
+            ui.heading("Enter encryption key:");
 
             ui.add_enabled_ui(!self.encryption_state, |ui| {
                 ui.horizontal(|ui| {
                     //ui.label("Path:");
-                    ui.text_edit_singleline(&mut self.temp_label);
+                    ui.text_edit_singleline(&mut self.temp_label); //to do: make it password type
+
                     if ui.button("Confirm").clicked() {
-                        self.label = self.temp_label.clone();
+                        self.encryption_key = self.temp_label.clone();
+                        self.temp_label = "".to_owned();
                     }
 
                 });
             });
 
+            ui.heading("Enter path to encrypt:");
 
+            ui.add_enabled_ui(!self.encryption_state, |ui| {
+                ui.horizontal(|ui| {
+                    //ui.label("Path:");
+                    ui.text_edit_singleline(&mut self.temp_label2);
+                    if ui.button("Confirm").clicked() {
+                        self.label = self.temp_label2.clone();
+                    }
+
+                });
+            });
 
             ui.separator();
 
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 0.0;
-                ui.heading("Encryption State of  ");
-                let selected_text = &self.label;
-                ui.label(selected_text);
-                ui.label("     ");
-                toggle_ui(ui, &mut self.encryption_state);
+            ui.add_enabled_ui(!self.encryption_key.is_empty(), |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    ui.heading("Encryption State of  ");
+                    let selected_text = &self.label;
+                    ui.label(selected_text);
+                    ui.label("     ");
+                    toggle_ui(ui, &mut self.encryption_state);
+                });
             });
 
             if ui.button("Test Encrypt").clicked() {
 
-                let data = "test".to_string();
+                let data = "test".to_string(); // Create a String instance
+
+                let encryption_key = Arc::new(self.encryption_key.clone()); // Cloning the encryption key if it's cloneable
 
                 thread::spawn(move || {
-                    encrypt_test(data)
+                    encrypt_test(data, &encryption_key); // `data` is moved into the closure
+                    // Cloned context can be used here: cloned_ctx
                 });
             }
 
@@ -126,6 +150,7 @@ impl eframe::App for EncryptoInterface {
 
     /// Called by the framework to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        self.encryption_key = "".to_owned();
         eframe::set_value(storage, eframe::APP_KEY, self);
     }
 }
