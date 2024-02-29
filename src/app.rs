@@ -84,7 +84,7 @@ impl eframe::App for EncryptoInterface {
 
             ui.heading("Enter encryption key:");
 
-            ui.add_enabled_ui(!self.encryption_state, |ui| {
+            ui.add_enabled_ui(!self.encryption_state | self.encryption_key.is_empty(), |ui| {
                 ui.horizontal(|ui| {
 
                     let  text_edit = egui::TextEdit::singleline(&mut self.temp_label).password(true);
