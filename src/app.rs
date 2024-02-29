@@ -1,7 +1,9 @@
+use std::fs;
 use std::thread;
 use crate::thread::encrypt_test;
 use std::sync::{Arc};
 use egui_file_dialog::FileDialog;
+use std::path::Path;
 
 /// We derive Deserialize/Serialize, so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -84,8 +86,10 @@ impl eframe::App for EncryptoInterface {
 
             ui.separator();
 
-            ui.add_enabled_ui(!self.encryption_key.is_empty() && !self.path.is_empty(), |ui| {
-                ui.horizontal(|ui| {
+
+
+            ui.horizontal(|ui| {
+                ui.add_enabled_ui(!self.encryption_key.is_empty() && !self.path.is_empty(), |ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.heading("Encryption State of  ");
                     let selected_text = &self.path;
@@ -95,17 +99,17 @@ impl eframe::App for EncryptoInterface {
                         println!("clicked")
                     }
                     ui.label("  ");
+                });
 
-                    ui.add_enabled_ui(!self.encryption_state, |ui| {
-                        if ui.button("Select Path").clicked() {
-                            self.file_dialog.select_directory();
-                        }
-                    });
-
-                    if let Some(path) = self.file_dialog.update(ctx).selected() {
-                        self.path = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
+                ui.add_enabled_ui(!self.encryption_state, |ui| {
+                    if ui.button("Select Path").clicked() {
+                        self.file_dialog.select_directory();
                     }
                 });
+
+                if let Some(path) = self.file_dialog.update(ctx).selected() {
+                    self.path = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
+                }
             });
 
             if ui.button("Test Encrypt").clicked() {
@@ -117,6 +121,28 @@ impl eframe::App for EncryptoInterface {
                 thread::spawn(move || {
                     encrypt_test(data, &encryption_key); // `data` is moved into the closure
                 });
+
+                let path = Path::new(&self.path);
+
+                if !path.exists() {
+                    println!("Error: Path does not exist.");
+                    return;
+                }
+
+                // Check if it's a directory
+                if !path.is_dir() {
+                    println!("Error: Path is not a directory.");
+                    return;
+                }
+
+                // Iterate over directory entries
+                for entry in fs::read_dir(path).unwrap() {
+                    let entry = entry.unwrap();
+                    let file_path = entry.path();
+
+                    // Print the full path of the file
+                    println!("{}", file_path.display());
+                }
             }
 
             ui.separator();
