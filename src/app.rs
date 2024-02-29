@@ -1,6 +1,7 @@
 use std::thread;
 use crate::thread::encrypt_test;
 use std::sync::{Arc};
+use egui_file_dialog::FileDialog;
 
 /// We derive Deserialize/Serialize, so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -14,7 +15,7 @@ pub struct EncryptoInterface {
     encryption_key: String,
 
     #[serde(skip)] // This how you opt out of serialization of a field
-    value: f32,
+    file_dialog: FileDialog,
 }
 
 impl Default for EncryptoInterface {
@@ -25,8 +26,8 @@ impl Default for EncryptoInterface {
             temp_label: "".to_owned(),
             temp_label2: "".to_owned(),
             encryption_state: false,
-            value: 2.7,
             encryption_key: "".to_owned(),
+            file_dialog: FileDialog::new().min_size([595.0, 375.0]).max_size([595.0, 375.0]).resizable(false).movable(false),
         }
     }
 }
@@ -85,8 +86,9 @@ impl eframe::App for EncryptoInterface {
 
             ui.add_enabled_ui(!self.encryption_state, |ui| {
                 ui.horizontal(|ui| {
-                    //ui.label("Path:");
-                    ui.text_edit_singleline(&mut self.temp_label); //to do: make it password type
+
+                    let  text_edit = egui::TextEdit::singleline(&mut self.temp_label).password(true);
+                    ui.add(text_edit);
 
                     if ui.button("Confirm").clicked() {
                         self.encryption_key = self.temp_label.clone();
@@ -100,10 +102,13 @@ impl eframe::App for EncryptoInterface {
 
             ui.add_enabled_ui(!self.encryption_state, |ui| {
                 ui.horizontal(|ui| {
-                    //ui.label("Path:");
-                    ui.text_edit_singleline(&mut self.temp_label2);
-                    if ui.button("Confirm").clicked() {
-                        self.label = self.temp_label2.clone();
+
+                    if ui.button("Select Path").clicked() {
+                        self.file_dialog.select_directory();
+                    }
+
+                    if let Some(path) = self.file_dialog.update(ctx).selected() {
+                        self.label = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
                     }
 
                 });
@@ -130,7 +135,6 @@ impl eframe::App for EncryptoInterface {
 
                 thread::spawn(move || {
                     encrypt_test(data, &encryption_key); // `data` is moved into the closure
-                    // Cloned context can be used here: cloned_ctx
                 });
             }
 
