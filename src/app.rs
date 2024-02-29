@@ -7,10 +7,7 @@ use egui_file_dialog::FileDialog;
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct EncryptoInterface {
-    // Example stuff:
-    label: String,
-    temp_label: String,
-    temp_label2: String,
+    path: String,
 
     #[serde(skip)] // This how you opt out of serialization of a field
     encryption_state: bool,
@@ -24,9 +21,7 @@ impl Default for EncryptoInterface {
     fn default() -> Self {
         Self {
             // Example stuff:
-            label: "".to_owned(),
-            temp_label: "".to_owned(),
-            temp_label2: "".to_owned(),
+            path: "".to_owned(),
             encryption_state: false,
             encryption_key: "".to_owned(),
             file_dialog: FileDialog::new().min_size([595.0, 375.0]).max_size([595.0, 375.0]).resizable(false).movable(false),
@@ -89,11 +84,11 @@ impl eframe::App for EncryptoInterface {
 
             ui.separator();
 
-            ui.add_enabled_ui(!self.encryption_key.is_empty() && !self.label.is_empty(), |ui| {
+            ui.add_enabled_ui(!self.encryption_key.is_empty() && !self.path.is_empty(), |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.heading("Encryption State of  ");
-                    let selected_text = &self.label;
+                    let selected_text = &self.path;
                     ui.label(selected_text);
                     ui.label("  ");
                     if toggle_ui(ui, &mut self.encryption_state).clicked(){
@@ -108,7 +103,7 @@ impl eframe::App for EncryptoInterface {
                     });
 
                     if let Some(path) = self.file_dialog.update(ctx).selected() {
-                        self.label = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
+                        self.path = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
                     }
                 });
             });
@@ -206,8 +201,6 @@ fn close_maximize_minimize(ui: &mut egui::Ui) {
     if close_response.clicked() {
         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
     }
-
-
 
     let is_maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
     if is_maximized {
