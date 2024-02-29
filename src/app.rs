@@ -11,10 +11,12 @@ pub struct EncryptoInterface {
     label: String,
     temp_label: String,
     temp_label2: String,
-    encryption_state: bool,
-    encryption_key: String,
 
     #[serde(skip)] // This how you opt out of serialization of a field
+    encryption_state: bool,
+    #[serde(skip)]
+    encryption_key: String,
+    #[serde(skip)]
     file_dialog: FileDialog,
 }
 
@@ -83,31 +85,7 @@ impl eframe::App for EncryptoInterface {
             // The central panel the region left after adding TopPanel's and SidePanel's
 
             ui.heading("Enter encryption key:");
-
-            ui.add_enabled_ui(!self.encryption_state | self.encryption_key.is_empty(), |ui| {
-                ui.horizontal(|ui| {
-
-                    let  text_edit = egui::TextEdit::singleline(&mut self.encryption_key).password(true);
-                    ui.add(text_edit);
-
-                });
-            });
-
-            ui.heading("Enter path to encrypt:");
-
-            ui.add_enabled_ui(!self.encryption_state, |ui| {
-                ui.horizontal(|ui| {
-
-                    if ui.button("Select Path").clicked() {
-                        self.file_dialog.select_directory();
-                    }
-
-                    if let Some(path) = self.file_dialog.update(ctx).selected() {
-                        self.label = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
-                    }
-
-                });
-            });
+            ui.add(egui::TextEdit::singleline(&mut self.encryption_key).password(true).char_limit(64).hint_text("Type your Password!"));
 
             ui.separator();
 
@@ -117,8 +95,21 @@ impl eframe::App for EncryptoInterface {
                     ui.heading("Encryption State of  ");
                     let selected_text = &self.label;
                     ui.label(selected_text);
-                    ui.label("     ");
-                    toggle_ui(ui, &mut self.encryption_state);
+                    ui.label("  ");
+                    if toggle_ui(ui, &mut self.encryption_state).clicked(){
+                        println!("clicked")
+                    }
+                    ui.label("  ");
+
+                    ui.add_enabled_ui(!self.encryption_state, |ui| {
+                        if ui.button("Select Path").clicked() {
+                            self.file_dialog.select_directory();
+                        }
+                    });
+
+                    if let Some(path) = self.file_dialog.update(ctx).selected() {
+                        self.label = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
+                    }
                 });
             });
 
@@ -149,7 +140,6 @@ impl eframe::App for EncryptoInterface {
 
     /// Called by the framework to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        self.encryption_key = "".to_owned();
         eframe::set_value(storage, eframe::APP_KEY, self);
     }
 }
