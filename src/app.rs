@@ -87,13 +87,8 @@ impl eframe::App for EncryptoInterface {
             ui.add_enabled_ui(!self.encryption_state | self.encryption_key.is_empty(), |ui| {
                 ui.horizontal(|ui| {
 
-                    let  text_edit = egui::TextEdit::singleline(&mut self.temp_label).password(true);
+                    let  text_edit = egui::TextEdit::singleline(&mut self.encryption_key).password(true);
                     ui.add(text_edit);
-
-                    if ui.button("Confirm").clicked() {
-                        self.encryption_key = self.temp_label.clone();
-                        self.temp_label = "".to_owned();
-                    }
 
                 });
             });
@@ -116,7 +111,7 @@ impl eframe::App for EncryptoInterface {
 
             ui.separator();
 
-            ui.add_enabled_ui(!self.encryption_key.is_empty(), |ui| {
+            ui.add_enabled_ui(!self.encryption_key.is_empty() && !self.label.is_empty(), |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.heading("Encryption State of  ");
