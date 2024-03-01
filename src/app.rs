@@ -1,9 +1,7 @@
-use std::fs;
 use std::thread;
 use crate::thread::encrypt_test;
 use std::sync::{Arc};
 use egui_file_dialog::FileDialog;
-use std::path::Path;
 
 /// We derive Deserialize/Serialize, so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -92,11 +90,23 @@ impl eframe::App for EncryptoInterface {
                 ui.add_enabled_ui(!self.encryption_key.is_empty() && !self.path.is_empty(), |ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.heading("Encryption State of  ");
-                    let selected_text = &self.path;
-                    ui.label(selected_text);
+                    let mut selected_text = self.path.clone();
+                    if selected_text.len() > 50{
+                        let start_index = selected_text.len() - 50;
+                        selected_text = selected_text[start_index..].to_string();
+                        selected_text = format!("...{}", selected_text);
+                    }
+                    ui.label(&selected_text);
                     ui.label("  ");
                     if toggle_ui(ui, &mut self.encryption_state).clicked(){
-                        println!("clicked")
+                        println!("clicked");
+                        let encryption_key = Arc::new(self.encryption_key.clone());
+                        let path = Arc::new(self.path.clone());
+                        let mode = self.encryption_state;
+
+                        thread::spawn(move || {
+                            encrypt_test(&encryption_key, &path, mode);
+                        });
                     }
                     ui.label("  ");
                 });
@@ -111,39 +121,6 @@ impl eframe::App for EncryptoInterface {
                     self.path = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
                 }
             });
-
-            if ui.button("Test Encrypt").clicked() {
-
-                let data = "test".to_string(); // Create a String instance
-
-                let encryption_key = Arc::new(self.encryption_key.clone()); // Cloning the encryption key if it's cloneable
-
-                thread::spawn(move || {
-                    encrypt_test(data, &encryption_key); // `data` is moved into the closure
-                });
-
-                let path = Path::new(&self.path);
-
-                if !path.exists() {
-                    println!("Error: Path does not exist.");
-                    return;
-                }
-
-                // Check if it's a directory
-                if !path.is_dir() {
-                    println!("Error: Path is not a directory.");
-                    return;
-                }
-
-                // Iterate over directory entries
-                for entry in fs::read_dir(path).unwrap() {
-                    let entry = entry.unwrap();
-                    let file_path = entry.path();
-
-                    // Print the full path of the file
-                    println!("{}", file_path.display());
-                }
-            }
 
             ui.separator();
 
