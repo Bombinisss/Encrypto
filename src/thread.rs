@@ -36,7 +36,7 @@ pub fn encrypt_test(path_str: &str, mode: bool) -> Option<bool> {
         let mut output_file = File::create(output_file_path.clone()).unwrap();
         write_file_info(&file_infos, &mut output_file).unwrap();
         println!("File information stored in '{}'", output_file_path.display());
-        // TODO: remove files on packing
+        delete_files(file_infos).unwrap();
     }
     else {
         let mut file = File::open(output_file_path.clone()).unwrap();
@@ -45,7 +45,11 @@ pub fn encrypt_test(path_str: &str, mode: bool) -> Option<bool> {
 
         let mut file = File::open(output_file_path.clone()).unwrap();
         read_file_data(&mut file_infos, &mut file).ok();
-        // TODO: remove .bin
+
+        match fs::remove_file(output_file_path) {
+            Ok(_) => println!("File deleted successfully"),
+            Err(e) => println!("Error deleting file: {}", e),
+        }
     }
 
     return Some(true)
@@ -180,9 +184,19 @@ fn read_file_data(file_infos: &Vec<FileInfo>, input_file: &mut File) -> Result<(
 fn create_file_from_data(file_info: &FileInfo, data: Vec<u8>) -> Result<(), std::io::Error>{
 
     let mut file = File::create(file_info.path.clone()).unwrap();
-
     file.write_all(&*data).unwrap();
 
+    Ok(())
+}
+
+fn delete_files(file_infos: Vec<FileInfo>) -> Result<(), std::io::Error>{
+
+    for file_info in file_infos {
+        match fs::remove_file(file_info.path) {
+            Ok(_) => println!("File deleted successfully"),
+            Err(e) => println!("Error deleting file: {}", e),
+        }
+    }
 
     Ok(())
 }

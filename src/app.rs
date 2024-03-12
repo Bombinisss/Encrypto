@@ -8,8 +8,6 @@ use egui_file_dialog::FileDialog;
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct EncryptoInterface {
     path: String,
-
-    #[serde(skip)] // This how you opt out of serialization of a field
     encryption_state: bool,
     #[serde(skip)]
     encryption_key: String,
