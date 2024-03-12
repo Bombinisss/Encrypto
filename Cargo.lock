@@ -662,9 +662,9 @@ dependencies = [
 
 [[package]]
 name = "egui-file-dialog"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff3d9c7192b7be73a317dbb4e391d65c71df25b818f5c5fd44a4e2b7853fdadd"
+checksum = "03829ba35052daeb4ac7a1629316c8f3785fa2e27823ee9a062f4a540af62231"
 dependencies = [
  "directories",
  "egui",

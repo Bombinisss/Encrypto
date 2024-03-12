@@ -36,6 +36,7 @@ pub fn encrypt_test(path_str: &str, mode: bool) -> Option<bool> {
         let mut output_file = File::create(output_file_path.clone()).unwrap();
         write_file_info(&file_infos, &mut output_file).unwrap();
         println!("File information stored in '{}'", output_file_path.display());
+        // TODO: remove files on packing
     }
     else {
         let mut file = File::open(output_file_path.clone()).unwrap();
@@ -44,6 +45,7 @@ pub fn encrypt_test(path_str: &str, mode: bool) -> Option<bool> {
 
         let mut file = File::open(output_file_path.clone()).unwrap();
         read_file_data(&mut file_infos, &mut file).ok();
+        // TODO: remove .bin
     }
 
     return Some(true)
@@ -150,11 +152,11 @@ fn read_file_info(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Resu
     Ok(())
 }
 
-fn read_file_data(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Result<(), std::io::Error> {
+fn read_file_data(file_infos: &Vec<FileInfo>, input_file: &mut File) -> Result<(), std::io::Error> {
 
     let mut temp = [0 ; 1];
     let mut start_pos = 0;
-    for file_info in &mut *file_infos{
+    for file_info in file_infos{
 
         start_pos += 16 + file_info.name_len + file_info.path_len;
     }
@@ -168,8 +170,19 @@ fn read_file_data(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Resu
             break;
         }
 
-        println!("{:?}", bytes)
+        println!("{:?}", bytes);
+        create_file_from_data(file_info, bytes).unwrap();
     }
+
+    Ok(())
+}
+
+fn create_file_from_data(file_info: &FileInfo, data: Vec<u8>) -> Result<(), std::io::Error>{
+
+    let mut file = File::create(file_info.path.clone()).unwrap();
+
+    file.write_all(&*data).unwrap();
+
 
     Ok(())
 }
