@@ -100,12 +100,12 @@ impl eframe::App for EncryptoInterface {
                     ui.label("  ");
                     if toggle_ui(ui, &mut self.encryption_state).clicked(){
                         println!("clicked");
-                        let encryption_key = Arc::new(self.encryption_key.clone());
+                        let _encryption_key = Arc::new(self.encryption_key.clone());
                         let path = Arc::new(self.path.clone());
                         let mode = self.encryption_state;
 
                         thread::spawn(move || {
-                            encrypt_test(&encryption_key, &path, mode);
+                            encrypt_test(&path, mode);
                         });
                     }
                     ui.label("  ");
