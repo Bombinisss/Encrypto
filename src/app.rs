@@ -1,5 +1,5 @@
 use std::thread;
-use crate::thread::encrypt_test;
+use crate::thread::pack_n_encrypt;
 use std::sync::{Arc};
 use egui_file_dialog::FileDialog;
 
@@ -98,12 +98,12 @@ impl eframe::App for EncryptoInterface {
                     ui.label("  ");
                     if toggle_ui(ui, &mut self.encryption_state).clicked(){
                         println!("clicked");
-                        let _encryption_key = Arc::new(self.encryption_key.clone());
+                        let encryption_key = Arc::new(self.encryption_key.clone());
                         let path = Arc::new(self.path.clone());
                         let mode = self.encryption_state;
 
                         thread::spawn(move || {
-                            encrypt_test(&path, mode);
+                            pack_n_encrypt(&path, mode, encryption_key);
                         });
                     }
                     ui.label("  ");

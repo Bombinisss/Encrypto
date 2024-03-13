@@ -2,6 +2,10 @@ use std::fs::{self, File};
 use std::io::{Write, Read, stderr};
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use aes::Aes256;
+use aes::cipher::{BlockEncrypt, BlockDecrypt, KeyInit, generic_array::GenericArray};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug)]
 struct FileInfo {
@@ -13,7 +17,7 @@ struct FileInfo {
     path_len: usize,
 }
 
-pub fn encrypt_test(path_str: &str, mode: bool) -> Option<bool> {
+pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -> Option<bool> {
     let directory_path = Path::new(path_str);
 
     let output_file_name = "files.bin";
@@ -37,6 +41,8 @@ pub fn encrypt_test(path_str: &str, mode: bool) -> Option<bool> {
         write_file_info(&file_infos, &mut output_file).unwrap();
         println!("File information stored in '{}'", output_file_path.display());
         delete_files(file_infos).unwrap();
+
+        encrypt_test(output_file_path, encryption_key);
     }
     else {
         let mut file = File::open(output_file_path.clone()).unwrap();
@@ -44,7 +50,7 @@ pub fn encrypt_test(path_str: &str, mode: bool) -> Option<bool> {
         read_file_info(&mut file_infos, &mut file).ok();
 
         let mut file = File::open(output_file_path.clone()).unwrap();
-        read_file_data(&mut file_infos, &mut file).ok();
+        read_file_data_n_unpack(&mut file_infos, &mut file).ok();
 
         match fs::remove_file(output_file_path) {
             Ok(_) => println!("File deleted successfully"),
@@ -111,7 +117,6 @@ fn write_file_info(file_infos: &[FileInfo], output_file: &mut File) -> Result<()
 }
 
 fn read_file_info(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Result<(), std::io::Error> {
-
     loop {
         let mut name_len_bytes = [0; 4];
         if let Err(_) = input_file.read_exact(&mut name_len_bytes) {
@@ -156,8 +161,7 @@ fn read_file_info(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Resu
     Ok(())
 }
 
-fn read_file_data(file_infos: &Vec<FileInfo>, input_file: &mut File) -> Result<(), std::io::Error> {
-
+fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) -> Result<(), std::io::Error> {
     let mut temp = [0 ; 1];
     let mut start_pos = 0;
     for file_info in file_infos{
@@ -182,7 +186,6 @@ fn read_file_data(file_infos: &Vec<FileInfo>, input_file: &mut File) -> Result<(
 }
 
 fn create_file_from_data(file_info: &FileInfo, data: Vec<u8>) -> Result<(), std::io::Error>{
-
     let mut file = File::create(file_info.path.clone()).unwrap();
     file.write_all(&*data).unwrap();
 
@@ -190,7 +193,6 @@ fn create_file_from_data(file_info: &FileInfo, data: Vec<u8>) -> Result<(), std:
 }
 
 fn delete_files(file_infos: Vec<FileInfo>) -> Result<(), std::io::Error>{
-
     for file_info in file_infos {
         match fs::remove_file(file_info.path) {
             Ok(_) => println!("File deleted successfully"),
@@ -199,4 +201,39 @@ fn delete_files(file_infos: Vec<FileInfo>) -> Result<(), std::io::Error>{
     }
 
     Ok(())
+}
+
+fn string_to_key(s: &str) -> [u8; 32] {
+    // Create SHA-256 hasher
+    let mut hasher = Sha256::new();
+
+    // Hash the input string
+    hasher.update(s);
+
+    // Get the resulting hash
+    let result = hasher.finalize();
+
+    // Convert the hash into a fixed-size array
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&result[..]);
+
+    return key;
+}
+
+fn encrypt_test(_output_file_path: PathBuf, encryption_key: Arc<String>){
+    let key = string_to_key(encryption_key.as_str());
+    let block = GenericArray::from([42u8; 16]); //maximum of 16 bytes
+
+    let cipher = Aes256::new_from_slice(&key);
+
+    let block_copy = block.clone();
+
+    let mut blocks = [block; 100];
+    cipher.clone().expect("REASON").encrypt_blocks(&mut blocks);
+
+    cipher.expect("REASON").decrypt_blocks(&mut blocks);
+
+    for block in blocks.iter_mut() {
+        assert_eq!(block, &block_copy);
+    }
 }
