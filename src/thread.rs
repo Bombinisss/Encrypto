@@ -46,14 +46,14 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         encrypt_file(packed_file_path.clone(), encrypted_file_path.clone(), encryption_key);
 
         match fs::remove_file(packed_file_path.clone()) {
-            Ok(_) => println!("File deleted successfully"),
+            Ok(_) => println!("File deleted successfully {:?}", packed_file_path.clone()),
             Err(e) => println!("Error deleting file: {}", e),
         }
     }
     else {
         decrypt_file(encrypted_file_path.clone(), packed_file_path.clone(), encryption_key);
         match fs::remove_file(encrypted_file_path.clone()) {
-            Ok(_) => println!("File deleted successfully"),
+            Ok(_) => println!("File deleted successfully {:?}", encrypted_file_path.clone()),
             Err(e) => println!("Error deleting file: {}", e),
         }
 
@@ -65,9 +65,9 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
 
         match read_file_data_n_unpack(&mut file_infos, &mut file) {
             true => {
-                println!("File reading successfully");
-                match fs::remove_file(packed_file_path) {
-                    Ok(_) => println!("File deleted successfully"),
+                println!("File read successfully");
+                match fs::remove_file(packed_file_path.clone()) {
+                    Ok(_) => println!("File deleted successfully {:?}", packed_file_path.clone()),
                     Err(e) => println!("Error deleting file: {}", e),
                 }
             },
@@ -128,7 +128,6 @@ fn write_file_info(file_infos: &[FileInfo], output_file: &mut File) -> Result<()
     // Write bytes for each file
     for file_info in file_infos {
         output_file.write_all(&file_info.bytes)?;
-        println!("{:?}", file_info.bytes);
     }
 
     Ok(())
@@ -243,7 +242,6 @@ fn encrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
     let mut file = File::open(input_file.clone()).unwrap();
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
-    println!("enc");
     loop {
         let mut buffer = GenericArray::from([0u8; 16]);
         let bytes_read = file.read(&mut buffer).ok()?;
@@ -251,7 +249,6 @@ fn encrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
         if bytes_read == 0 {
             break; // Reached end of file
         }
-        println!("{:x?}", buffer);
         cipher.clone().expect("REASON").encrypt_block(&mut buffer);
 
         let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
@@ -270,7 +267,6 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
     let mut file = File::open(input_file.clone()).unwrap();
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
-    println!("dec");
     loop {
         let mut buffer = GenericArray::from([0u8; 16]);
         let bytes_read = file.read(&mut buffer).ok()?;
@@ -279,8 +275,6 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
             break; // Reached end of file
         }
         cipher.clone().expect("REASON").decrypt_block(&mut buffer);
-
-        println!("{:x?}", buffer);
 
         let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
         let thread_join_handle = thread::spawn(move || {
