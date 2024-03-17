@@ -62,7 +62,11 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         read_file_info(&mut file_infos, &mut file).ok();
 
         let mut file = File::open(packed_file_path.clone()).unwrap();
-        read_file_data_n_unpack(&mut file_infos, &mut file).ok();
+
+        match read_file_data_n_unpack(&mut file_infos, &mut file) {
+            true => println!("File reading successfully"),
+            false => println!("Error reading file!"),
+        }
 
         match fs::remove_file(packed_file_path) {
             Ok(_) => println!("File deleted successfully"),
@@ -173,15 +177,16 @@ fn read_file_info(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Resu
     Ok(())
 }
 
-fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) -> Result<(), std::io::Error> {
+fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) -> bool {
     let mut temp = [0 ; 1];
     let mut start_pos = 0;
     for file_info in file_infos{
 
         start_pos += 16 + file_info.name_len + file_info.path_len;
     }
+    if start_pos == 0 { return false; }
     start_pos-=1;
-    input_file.seek_read(&mut temp, start_pos as u64)?;
+    let _ = input_file.seek_read(&mut temp, start_pos as u64);
 
     for file_info in file_infos {
         let mut bytes = vec![0; file_info.size];
@@ -194,7 +199,7 @@ fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) ->
         create_file_from_data(file_info, bytes).unwrap();
     }
 
-    Ok(())
+    true
 }
 
 fn create_file_from_data(file_info: &FileInfo, data: Vec<u8>) -> Result<(), std::io::Error>{

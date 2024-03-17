@@ -114,6 +114,9 @@ impl eframe::App for EncryptoInterface {
                         self.file_dialog.select_directory();
                     }
                 });
+                if ui.button("Reset").clicked() {
+                    self.encryption_state = !self.encryption_state;
+                }
 
                 if let Some(path) = self.file_dialog.update(ctx).selected() {
                     self.path = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
