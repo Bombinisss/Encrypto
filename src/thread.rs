@@ -21,45 +21,50 @@ struct FileInfo {
 
 pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -> Option<bool> {
     let directory_path = Path::new(path_str);
-
-    let output_file_name = "files.bin";
-
     if !directory_path.exists() {
         println!("Error: Directory does not exist.");
         return Some(false);
     }
 
-    // Create the output file path by combining directory and filename
-    let info_file_path = directory_path.join(output_file_name);
+    let packed_file_name = "files.bin";
+    let encrypted_file_name = "files.encrypto";
+    let packed_file_path = directory_path.join(packed_file_name);
+    let encrypted_file_path = directory_path.join(encrypted_file_name);
 
     // Write file information to the file
     if mode {
         // Create an empty list to store file information
         let mut file_infos: Vec<FileInfo> = Vec::new();
         // Collect file information recursively
-        collect_file_info(directory_path, &mut file_infos, output_file_name).unwrap();
+        collect_file_info(directory_path, &mut file_infos, packed_file_name).unwrap();
         // Open the output file in the specified directory
-        let mut output_file = File::create(info_file_path.clone()).unwrap();
+        let mut output_file = File::create(packed_file_path.clone()).unwrap();
         write_file_info(&file_infos, &mut output_file).unwrap();
-        println!("File information stored in '{}'", info_file_path.display());
+        println!("File information stored in '{}'", packed_file_path.display());
         delete_files(file_infos).unwrap();
 
-        encrypt_file(info_file_path.clone(), encryption_key);
+        encrypt_file(packed_file_path.clone(), encrypted_file_path.clone(), encryption_key);
 
-        match fs::remove_file(info_file_path) {
+        match fs::remove_file(packed_file_path.clone()) {
             Ok(_) => println!("File deleted successfully"),
             Err(e) => println!("Error deleting file: {}", e),
         }
     }
     else {
-        let mut file = File::open(info_file_path.clone()).unwrap();
+        decrypt_file(encrypted_file_path.clone(), packed_file_path.clone(), encryption_key);
+        match fs::remove_file(encrypted_file_path.clone()) {
+            Ok(_) => println!("File deleted successfully"),
+            Err(e) => println!("Error deleting file: {}", e),
+        }
+
+        let mut file = File::open(packed_file_path.clone()).unwrap();
         let mut file_infos: Vec<FileInfo> = Vec::new();
         read_file_info(&mut file_infos, &mut file).ok();
 
-        let mut file = File::open(info_file_path.clone()).unwrap();
+        let mut file = File::open(packed_file_path.clone()).unwrap();
         read_file_data_n_unpack(&mut file_infos, &mut file).ok();
 
-        match fs::remove_file(info_file_path) {
+        match fs::remove_file(packed_file_path) {
             Ok(_) => println!("File deleted successfully"),
             Err(e) => println!("Error deleting file: {}", e),
         }
@@ -227,7 +232,7 @@ fn string_to_key(s: &str) -> [u8; 32] {
     return key;
 }
 
-fn encrypt_file(input_file: PathBuf, encryption_key: Arc<String>) -> Option<bool> {
+fn encrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<String>) -> Option<bool> {
     let mut file = File::open(input_file.clone()).unwrap();
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
@@ -244,8 +249,7 @@ fn encrypt_file(input_file: PathBuf, encryption_key: Arc<String>) -> Option<bool
 
         println!("{:x?}", buffer);
 
-        let mut output_file_path_clone = input_file.clone(); // Clone output_file_path for each thread
-        output_file_path_clone.set_extension("encrypto");
+        let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
         thread::spawn(move || {
             let temp_file_path = output_file_path_clone.clone();
             append_to_file(temp_file_path, buffer).unwrap();
@@ -255,7 +259,7 @@ fn encrypt_file(input_file: PathBuf, encryption_key: Arc<String>) -> Option<bool
     Some(true)
 }
 
-fn decrypt_file(input_file: PathBuf, encryption_key: Arc<String>) -> Option<bool> {
+fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<String>) -> Option<bool> {
     let mut file = File::open(input_file.clone()).unwrap();
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
@@ -272,8 +276,7 @@ fn decrypt_file(input_file: PathBuf, encryption_key: Arc<String>) -> Option<bool
 
         println!("{:x?}", buffer);
 
-        let mut output_file_path_clone = input_file.clone(); // Clone output_file_path for each thread
-        //output_file_path_clone.set_extension("encrypto");
+        let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
         thread::spawn(move || {
             let temp_file_path = output_file_path_clone.clone();
             append_to_file(temp_file_path, buffer).unwrap();
