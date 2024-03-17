@@ -4,7 +4,6 @@ use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
-use std::thread::JoinHandle;
 use aes::Aes256;
 use aes::cipher::{BlockEncrypt, BlockDecrypt, KeyInit, generic_array::GenericArray};
 use aes::cipher::consts::U16;
@@ -244,8 +243,7 @@ fn encrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
     let mut file = File::open(input_file.clone()).unwrap();
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
-    let mut threads_list: Vec<JoinHandle<()>> = vec![];
-
+    println!("enc");
     loop {
         let mut buffer = GenericArray::from([0u8; 16]);
         let bytes_read = file.read(&mut buffer).ok()?;
@@ -253,22 +251,17 @@ fn encrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
         if bytes_read == 0 {
             break; // Reached end of file
         }
-
-        cipher.clone().expect("REASON").encrypt_block(&mut buffer);
-
         println!("{:x?}", buffer);
+        cipher.clone().expect("REASON").encrypt_block(&mut buffer);
 
         let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
         let thread_join_handle = thread::spawn(move || {
             let temp_file_path = output_file_path_clone.clone();
             append_to_file(temp_file_path, buffer).unwrap();
         });
-        threads_list.push(thread_join_handle);
+        thread_join_handle.join().expect("TODO: Thread panicked");
     }
 
-    for join_handle in threads_list {
-        join_handle.join().expect("Thread panicked!");
-    }
     println!("finished encrypt");
     Some(true)
 }
@@ -277,8 +270,7 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
     let mut file = File::open(input_file.clone()).unwrap();
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
-    let mut threads_list: Vec<JoinHandle<()>> = vec![];
-
+    println!("dec");
     loop {
         let mut buffer = GenericArray::from([0u8; 16]);
         let bytes_read = file.read(&mut buffer).ok()?;
@@ -286,22 +278,18 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
         if bytes_read == 0 {
             break; // Reached end of file
         }
-
         cipher.clone().expect("REASON").decrypt_block(&mut buffer);
 
         println!("{:x?}", buffer);
 
-        let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread TODO: ENFORCE ORDER
+        let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
         let thread_join_handle = thread::spawn(move || {
             let temp_file_path = output_file_path_clone.clone();
             append_to_file(temp_file_path, buffer).unwrap();
         });
-        threads_list.push(thread_join_handle);
+        thread_join_handle.join().expect("TODO: Thread panicked");
     }
 
-    for join_handle in threads_list {
-        join_handle.join().expect("Thread panicked!");
-    }
     println!("finished decrypt");
     Some(true)
 }
