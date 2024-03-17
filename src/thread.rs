@@ -4,6 +4,7 @@ use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
+use std::thread::JoinHandle;
 use aes::Aes256;
 use aes::cipher::{BlockEncrypt, BlockDecrypt, KeyInit, generic_array::GenericArray};
 use aes::cipher::consts::U16;
@@ -64,13 +65,14 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         let mut file = File::open(packed_file_path.clone()).unwrap();
 
         match read_file_data_n_unpack(&mut file_infos, &mut file) {
-            true => println!("File reading successfully"),
+            true => {
+                println!("File reading successfully");
+                match fs::remove_file(packed_file_path) {
+                    Ok(_) => println!("File deleted successfully"),
+                    Err(e) => println!("Error deleting file: {}", e),
+                }
+            },
             false => println!("Error reading file!"),
-        }
-
-        match fs::remove_file(packed_file_path) {
-            Ok(_) => println!("File deleted successfully"),
-            Err(e) => println!("Error deleting file: {}", e),
         }
     }
 
@@ -127,6 +129,7 @@ fn write_file_info(file_infos: &[FileInfo], output_file: &mut File) -> Result<()
     // Write bytes for each file
     for file_info in file_infos {
         output_file.write_all(&file_info.bytes)?;
+        println!("{:?}", file_info.bytes);
     }
 
     Ok(())
@@ -186,7 +189,7 @@ fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) ->
     }
     if start_pos == 0 { return false; }
     start_pos-=1;
-    let _ = input_file.seek_read(&mut temp, start_pos as u64);
+    input_file.seek_read(&mut temp, start_pos as u64).expect("Seek read fail!");
 
     for file_info in file_infos {
         let mut bytes = vec![0; file_info.size];
@@ -241,6 +244,7 @@ fn encrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
     let mut file = File::open(input_file.clone()).unwrap();
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
+    let mut threads_list: Vec<JoinHandle<()>> = vec![];
 
     loop {
         let mut buffer = GenericArray::from([0u8; 16]);
@@ -255,12 +259,17 @@ fn encrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
         println!("{:x?}", buffer);
 
         let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
-        thread::spawn(move || {
+        let thread_join_handle = thread::spawn(move || {
             let temp_file_path = output_file_path_clone.clone();
             append_to_file(temp_file_path, buffer).unwrap();
         });
+        threads_list.push(thread_join_handle);
     }
 
+    for join_handle in threads_list {
+        join_handle.join().expect("Thread panicked!");
+    }
+    println!("finished encrypt");
     Some(true)
 }
 
@@ -268,6 +277,7 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
     let mut file = File::open(input_file.clone()).unwrap();
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
+    let mut threads_list: Vec<JoinHandle<()>> = vec![];
 
     loop {
         let mut buffer = GenericArray::from([0u8; 16]);
@@ -281,13 +291,18 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
 
         println!("{:x?}", buffer);
 
-        let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
-        thread::spawn(move || {
+        let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread TODO: ENFORCE ORDER
+        let thread_join_handle = thread::spawn(move || {
             let temp_file_path = output_file_path_clone.clone();
             append_to_file(temp_file_path, buffer).unwrap();
         });
+        threads_list.push(thread_join_handle);
     }
 
+    for join_handle in threads_list {
+        join_handle.join().expect("Thread panicked!");
+    }
+    println!("finished decrypt");
     Some(true)
 }
 
