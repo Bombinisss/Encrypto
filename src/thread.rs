@@ -1,10 +1,12 @@
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Write, Read, stderr};
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::thread;
 use aes::Aes256;
 use aes::cipher::{BlockEncrypt, BlockDecrypt, KeyInit, generic_array::GenericArray};
+use aes::cipher::consts::U16;
 use sha2::{Digest, Sha256};
 
 #[derive(Debug)]
@@ -28,7 +30,7 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
     }
 
     // Create the output file path by combining directory and filename
-    let output_file_path = directory_path.join(output_file_name);
+    let info_file_path = directory_path.join(output_file_name);
 
     // Write file information to the file
     if mode {
@@ -37,22 +39,27 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         // Collect file information recursively
         collect_file_info(directory_path, &mut file_infos, output_file_name).unwrap();
         // Open the output file in the specified directory
-        let mut output_file = File::create(output_file_path.clone()).unwrap();
+        let mut output_file = File::create(info_file_path.clone()).unwrap();
         write_file_info(&file_infos, &mut output_file).unwrap();
-        println!("File information stored in '{}'", output_file_path.display());
+        println!("File information stored in '{}'", info_file_path.display());
         delete_files(file_infos).unwrap();
 
-        encrypt_test(output_file_path, encryption_key);
+        encrypt_file(info_file_path.clone(), encryption_key);
+
+        match fs::remove_file(info_file_path) {
+            Ok(_) => println!("File deleted successfully"),
+            Err(e) => println!("Error deleting file: {}", e),
+        }
     }
     else {
-        let mut file = File::open(output_file_path.clone()).unwrap();
+        let mut file = File::open(info_file_path.clone()).unwrap();
         let mut file_infos: Vec<FileInfo> = Vec::new();
         read_file_info(&mut file_infos, &mut file).ok();
 
-        let mut file = File::open(output_file_path.clone()).unwrap();
+        let mut file = File::open(info_file_path.clone()).unwrap();
         read_file_data_n_unpack(&mut file_infos, &mut file).ok();
 
-        match fs::remove_file(output_file_path) {
+        match fs::remove_file(info_file_path) {
             Ok(_) => println!("File deleted successfully"),
             Err(e) => println!("Error deleting file: {}", e),
         }
@@ -178,7 +185,7 @@ fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) ->
             break;
         }
 
-        println!("{:?}", bytes);
+        println!("{:x?}", bytes);
         create_file_from_data(file_info, bytes).unwrap();
     }
 
@@ -220,20 +227,71 @@ fn string_to_key(s: &str) -> [u8; 32] {
     return key;
 }
 
-fn encrypt_test(_output_file_path: PathBuf, encryption_key: Arc<String>){
+fn encrypt_file(input_file: PathBuf, encryption_key: Arc<String>) -> Option<bool> {
+    let mut file = File::open(input_file.clone()).unwrap();
     let key = string_to_key(encryption_key.as_str());
-    let block = GenericArray::from([42u8; 16]); //maximum of 16 bytes
-
     let cipher = Aes256::new_from_slice(&key);
 
-    let block_copy = block.clone();
+    loop {
+        let mut buffer = GenericArray::from([0u8; 16]);
+        let bytes_read = file.read(&mut buffer).ok()?;
 
-    let mut blocks = [block; 100];
-    cipher.clone().expect("REASON").encrypt_blocks(&mut blocks);
+        if bytes_read == 0 {
+            break; // Reached end of file
+        }
 
-    cipher.expect("REASON").decrypt_blocks(&mut blocks);
+        cipher.clone().expect("REASON").encrypt_block(&mut buffer);
 
-    for block in blocks.iter_mut() {
-        assert_eq!(block, &block_copy);
+        println!("{:x?}", buffer);
+
+        let mut output_file_path_clone = input_file.clone(); // Clone output_file_path for each thread
+        output_file_path_clone.set_extension("encrypto");
+        thread::spawn(move || {
+            let temp_file_path = output_file_path_clone.clone();
+            append_to_file(temp_file_path, buffer).unwrap();
+        });
     }
+
+    Some(true)
+}
+
+fn decrypt_file(input_file: PathBuf, encryption_key: Arc<String>) -> Option<bool> {
+    let mut file = File::open(input_file.clone()).unwrap();
+    let key = string_to_key(encryption_key.as_str());
+    let cipher = Aes256::new_from_slice(&key);
+
+    loop {
+        let mut buffer = GenericArray::from([0u8; 16]);
+        let bytes_read = file.read(&mut buffer).ok()?;
+
+        if bytes_read == 0 {
+            break; // Reached end of file
+        }
+
+        cipher.clone().expect("REASON").decrypt_block(&mut buffer);
+
+        println!("{:x?}", buffer);
+
+        let mut output_file_path_clone = input_file.clone(); // Clone output_file_path for each thread
+        //output_file_path_clone.set_extension("encrypto");
+        thread::spawn(move || {
+            let temp_file_path = output_file_path_clone.clone();
+            append_to_file(temp_file_path, buffer).unwrap();
+        });
+    }
+
+    Some(true)
+}
+
+fn append_to_file(filename: PathBuf, data: GenericArray<u8, U16>) -> std::io::Result<()> {
+    // Open the file in append mode, creating it if it doesn't exist.
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(filename)?;
+
+    // Write the data to the file.
+    file.write_all(&data)?;
+
+    Ok(())
 }
