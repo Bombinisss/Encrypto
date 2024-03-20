@@ -8,7 +8,6 @@ use aes::Aes256;
 use aes::cipher::{BlockEncrypt, BlockDecrypt, KeyInit, generic_array::GenericArray};
 use aes::cipher::consts::U16;
 use sha2::{Digest, Sha256};
-
 #[derive(Debug)]
 struct FileInfo {
     name: String,
@@ -36,7 +35,7 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         // Create an empty list to store file information
         let mut file_infos: Vec<FileInfo> = Vec::new();
         // Collect file information recursively
-        collect_file_info(directory_path, &mut file_infos, packed_file_name).unwrap();
+        collect_file_info(directory_path, &mut file_infos).unwrap();
         // Open the output file in the specified directory
         let mut output_file = File::create(packed_file_path.clone()).unwrap();
         write_file_info(&file_infos, &mut output_file).unwrap();
@@ -62,7 +61,6 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         read_file_info(&mut file_infos, &mut file).ok();
 
         let mut file = File::open(packed_file_path.clone()).unwrap();
-
         match read_file_data_n_unpack(&mut file_infos, &mut file) {
             true => {
                 println!("File read successfully");
@@ -78,19 +76,14 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
     return Some(true)
 }
 
-fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>, output_file_name: &str) -> Result<(), std::io::Error> {
+fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>) -> Result<(), std::io::Error> {
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let metadata = fs::metadata(&entry.path())?; // Get metadata for each entry
 
         if metadata.is_dir() {
-            collect_file_info(&entry.path(), file_infos, output_file_name)?; // Recursively explore directories
+            collect_file_info(&entry.path(), file_infos)?; // Recursively explore directories
         } else {
-
-            if entry.file_name().to_str().unwrap().to_string()==output_file_name {
-                continue;
-            }
-
             let mut file = File::open(entry.path())?;
             let mut buffer = Vec::new();
             let size = file.read_to_end(&mut buffer)?;
@@ -170,8 +163,6 @@ fn read_file_info(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Resu
             path_len: path_len as usize,
         };
 
-        println!("{:?}", file_info);
-
         file_infos.push(file_info);
     }
 
@@ -196,7 +187,6 @@ fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) ->
             break;
         }
 
-        println!("{:x?}", bytes);
         create_file_from_data(file_info, bytes).unwrap();
     }
 
