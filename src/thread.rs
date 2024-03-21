@@ -5,8 +5,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::collections::BTreeMap;
-use std::thread::sleep;
-use std::time::Duration;
 use aes::Aes256;
 use aes::cipher::{BlockEncrypt, BlockDecrypt, KeyInit, generic_array::GenericArray};
 use aes::cipher::consts::U16;
@@ -41,13 +39,9 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         // Collect file information recursively
         collect_file_info(directory_path, &mut file_infos).unwrap(); // not reading file to buffer ---- do this somewhere \/
 
-        let header = write_file_info(&file_infos);
-        
-        let mut file = File::create(encrypted_file_path.clone()).unwrap();
-        file.write_all(&header).unwrap();
-        //drop(file); //close file
+        let header = get_raw_file_info(&file_infos);
 
-        encrypt_file(encrypted_file_path.clone(), encryption_key, file_infos);
+        encrypt_files(encrypted_file_path.clone(), encryption_key, file_infos, header);
         
         //delete_files(file_infos).unwrap();
     }
@@ -100,7 +94,7 @@ fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>) -> Result<(), 
     Ok(())
 }
 
-fn write_file_info(file_infos: &[FileInfo]) -> Vec<u8> {
+fn get_raw_file_info(file_infos: &[FileInfo]) -> Vec<u8> {
     let mut header: Vec<u8> = vec![];
     
     for file_info in file_infos {
@@ -223,14 +217,48 @@ fn string_to_key(s: &str) -> [u8; 32] {
     return key;
 }
 
-fn encrypt_file(output_file: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>) -> Option<bool> { //TODO: encrypt header too
+fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>, header: Vec<u8>) -> Option<bool> {
     
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
     let num_threads = num_cpus::get();
 
-    let mut thread_manager = ThreadManager::<()>::new(num_threads);
-    let mut saver_thread_manager = ThreadManager::<()>::new(1);
+    let thread_manager = ThreadManager::<()>::new(num_threads);
+    let saver_thread_manager = ThreadManager::<()>::new(1);
+
+    // Splitting header into 16-byte parts
+    let mut parts: Vec<GenericArray<u8, U16>> = header
+        .chunks_exact(16)
+        .map(|chunk| {
+            let mut arr = GenericArray::from([0u8; 16]);
+            arr.copy_from_slice(chunk);
+            arr
+        })
+        .collect();
+    // If there are remaining bytes, push them as a separate part
+    let mut last_len: usize = 16;
+    if !header.is_empty() && header.len() % 16 != 0 {
+        let remainder = &header[header.len() - (header.len() % 16)..];
+        let mut arr = GenericArray::from([0u8; 16]);
+        last_len = remainder.len();
+        arr[..remainder.len()].copy_from_slice(remainder);
+        parts.push(arr);
+    }
+    
+    
+    for (i, part) in parts.iter().enumerate() {
+        println!("Part {}: {:?}, last len:{}", i, part, last_len);
+        let mut temp = part.clone();
+        cipher.clone().expect("REASON").decrypt_block(&mut temp);
+        
+        if i == parts.len()-1 {
+            append_x_to_file(output_file.clone(), temp, last_len).unwrap();
+            break;
+        }
+        append_x_to_file(output_file.clone(), temp, 16).unwrap();
+    }
+    
+    drop(parts);
 
     for file in file_infos{
         
@@ -244,12 +272,20 @@ fn encrypt_file(output_file: PathBuf, encryption_key: Arc<String>, file_infos: V
             let mut blocks_to_write = number_of_blocks.clone();
             let temp_file_path = output_file_copy.clone();
             let mut counter: u64 = 0;
+            let file_size_copy = file.size.clone();
             
             while blocks_to_write!=0 {
                 
                 if thread_shared_map.lock().unwrap().get(&counter).is_none() { continue; }
                 let data = thread_shared_map.lock().unwrap().get(&counter).unwrap().clone();
-                append_16_to_file(temp_file_path.clone(), data).unwrap();
+                if blocks_to_write==1 && file_size_copy%16!=0 {
+                    let x = file_size_copy%16;
+                    append_x_to_file(temp_file_path.clone(), data, x).unwrap();
+                    counter+=1;
+                    blocks_to_write-=1;
+                    continue;
+                }
+                append_x_to_file(temp_file_path.clone(), data, 16).unwrap();
                 thread_shared_map.lock().unwrap().remove(&counter).unwrap();
                 
                 counter+=1;
@@ -264,9 +300,9 @@ fn encrypt_file(output_file: PathBuf, encryption_key: Arc<String>, file_infos: V
             let thread_shared_map2 = Arc::clone(&shared_map);
             // Submit job for execution
             thread_manager.execute(move || {
-                let mut block = GenericArray::from([0u8; 16]);
-                block = read_16_from_file(&mut file_path_clone.clone(), (i_clone*16)as u64); //TODO: Write same length as read
-                //cipher_clone.clone().expect("REASON").decrypt_block(&mut block);
+                let mut block;
+                block = read_16_from_file(&mut file_path_clone.clone(), (i_clone*16)as u64);
+                cipher_clone.clone().expect("REASON").decrypt_block(&mut block);
                 thread_shared_map2.lock().unwrap().insert(i_clone as u64, block);
             });
         }
@@ -295,7 +331,7 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
         let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
         let thread_join_handle = thread::spawn(move || {
             let temp_file_path = output_file_path_clone.clone();
-            append_16_to_file(temp_file_path, buffer).unwrap();
+            append_x_to_file(temp_file_path, buffer, 16).unwrap();
         });
         thread_join_handle.join().expect("TODO: Thread panicked");
     }
@@ -304,13 +340,19 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
     Some(true)
 }
 
-fn append_16_to_file(filename: PathBuf, data: GenericArray<u8, U16>) -> std::io::Result<()> {
+fn append_x_to_file(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) -> std::io::Result<()> {
     // Open the file in append mode, creating it if it doesn't exist.
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(filename)?;
 
+    if x!=16 {
+        let mut temp = data.to_vec();
+        temp.truncate(x as usize);
+        file.write_all(&temp)?;
+        return Ok(());
+    }
     // Write the data to the file.
     file.write_all(&data)?;
 
@@ -334,7 +376,7 @@ fn read_16_from_file(filename: &mut PathBuf, at: u64) -> GenericArray<u8, U16> {
 }
 
 pub fn div_up(a: usize, b: usize) -> usize {
-    let mut output=0;
+    let mut output;
     if a % 16 == 0{
         output = a/b;
     }
