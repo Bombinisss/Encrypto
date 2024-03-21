@@ -11,6 +11,7 @@ use aes::cipher::consts::U16;
 use sha2::{Digest, Sha256};
 use thread_manager::ThreadManager;
 #[derive(Debug)]
+#[derive(Clone)]
 struct FileInfo {
     name: String,
     path: PathBuf,
@@ -40,10 +41,11 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         collect_file_info(directory_path, &mut file_infos).unwrap(); // not reading file to buffer ---- do this somewhere \/
 
         let header = get_raw_file_info(&file_infos);
+        let file_infos_copy: Vec<FileInfo> = file_infos.clone();
 
         encrypt_files(encrypted_file_path.clone(), encryption_key.clone(), file_infos, header);
         
-        //delete_files(file_infos).unwrap();
+        delete_files(file_infos_copy).unwrap();
     }
     else { //TODO: Rework decrypt logic later
         //decrypt_file(encrypted_file_path_clone.clone(), packed_file_path.clone(), encryption_key.clone());
@@ -55,7 +57,7 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         let mut file = File::open(encrypted_file_path.clone()).unwrap();
         let mut file_infos: Vec<FileInfo> = Vec::new();
         read_file_info(&mut file_infos, &mut file).ok();
-        
+
         drop(file);
 
         let mut file = File::open(encrypted_file_path.clone()).unwrap();
@@ -249,7 +251,7 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
     
     
     for (i, part) in parts.iter().enumerate() {
-        println!("Part {}: {:?}, last len:{}", i, part, last_len);
+        //println!("Part {}: {:?}, last len:{}", i, part, last_len);
         let mut temp = part.clone();
         cipher.clone().expect("REASON").encrypt_block(&mut temp);
         
@@ -328,7 +330,7 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
         if bytes_read == 0 {
             break; // Reached end of file
         }
-        
+
         cipher.clone().expect("REASON").decrypt_block(&mut buffer);
 
         let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
