@@ -41,22 +41,24 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
 
         let header = get_raw_file_info(&file_infos);
 
-        encrypt_files(encrypted_file_path.clone(), encryption_key, file_infos, header);
+        encrypt_files(encrypted_file_path.clone(), encryption_key.clone(), file_infos, header);
         
         //delete_files(file_infos).unwrap();
     }
     else { //TODO: Rework decrypt logic later
-        decrypt_file(encrypted_file_path.clone(), packed_file_path.clone(), encryption_key);
-        match fs::remove_file(encrypted_file_path.clone()) {
-            Ok(_) => println!("File deleted successfully {:?}", encrypted_file_path.clone()),
-            Err(e) => println!("Error deleting file: {}", e),
-        }
+        //decrypt_file(encrypted_file_path_clone.clone(), packed_file_path.clone(), encryption_key.clone());
+        // match fs::remove_file(encrypted_file_path.clone()) {
+        //     Ok(_) => println!("File deleted successfully {:?}", encrypted_file_path.clone()),
+        //     Err(e) => println!("Error deleting file: {}", e),
+        // }
 
-        let mut file = File::open(packed_file_path.clone()).unwrap();
+        let mut file = File::open(encrypted_file_path.clone()).unwrap();
         let mut file_infos: Vec<FileInfo> = Vec::new();
         read_file_info(&mut file_infos, &mut file).ok();
+        
+        drop(file);
 
-        let mut file = File::open(packed_file_path.clone()).unwrap();
+        let mut file = File::open(encrypted_file_path.clone()).unwrap();
         match read_file_data_n_unpack(&mut file_infos, &mut file) {
             true => {
                 println!("File read successfully");
@@ -249,7 +251,7 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
     for (i, part) in parts.iter().enumerate() {
         println!("Part {}: {:?}, last len:{}", i, part, last_len);
         let mut temp = part.clone();
-        cipher.clone().expect("REASON").decrypt_block(&mut temp);
+        cipher.clone().expect("REASON").encrypt_block(&mut temp);
         
         if i == parts.len()-1 {
             append_x_to_file(output_file.clone(), temp, last_len).unwrap();
@@ -302,7 +304,7 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
             thread_manager.execute(move || {
                 let mut block;
                 block = read_16_from_file(&mut file_path_clone.clone(), (i_clone*16)as u64);
-                cipher_clone.clone().expect("REASON").decrypt_block(&mut block);
+                cipher_clone.clone().expect("REASON").encrypt_block(&mut block);
                 thread_shared_map2.lock().unwrap().insert(i_clone as u64, block);
             });
         }
@@ -326,6 +328,7 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
         if bytes_read == 0 {
             break; // Reached end of file
         }
+        
         cipher.clone().expect("REASON").decrypt_block(&mut buffer);
 
         let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
