@@ -40,7 +40,11 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
     if mode {
         let mut file_infos: Vec<FileInfo> = Vec::new();
         // Collect file information recursively
-        collect_file_info(directory_path, &mut file_infos).unwrap();
+        collect_file_info(directory_path, &mut file_infos, encrypted_file_name).unwrap();
+        if file_infos.len()==0 { 
+            println!("No files to encrypt!");
+            return Some(true); 
+        }
 
         let header = get_raw_file_info(&file_infos);
         let file_infos_copy: Vec<FileInfo> = file_infos.clone();
@@ -82,14 +86,20 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
     return Some(true)
 }
 
-fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>) -> Result<(), std::io::Error> {
+fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>, output_file_name: &str) -> Result<(), std::io::Error> {
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let metadata = fs::metadata(&entry.path())?; // Get metadata for each entry
 
         if metadata.is_dir() {
-            collect_file_info(&entry.path(), file_infos)?; // Recursively explore directories
+            collect_file_info(&entry.path(), file_infos, output_file_name)?; // Recursively explore directories
         } else {
+            if entry.file_name().to_str().unwrap().to_string()==output_file_name {
+                file_infos.clear();
+                println!(".encrypto file found - Probably meant to decrypt?");
+                return Ok(());
+            }
+
             let file_info = FileInfo {
                 name: entry.file_name().to_str().unwrap().to_string(),
                 path: entry.path(),
@@ -272,7 +282,7 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
 
     for file in file_infos{
         
-        let mut data_buffer: HashMap<u64, GenericArray<u8, U16>> = HashMap::new();
+        let data_buffer: HashMap<u64, GenericArray<u8, U16>> = HashMap::new();
         let shared_map: Arc<Mutex<HashMap<u64, GenericArray<u8, U16>>>> = Arc::new(Mutex::new(data_buffer));
         let number_of_blocks = div_up(file.size,16);
         let output_file_copy = output_file.clone();
