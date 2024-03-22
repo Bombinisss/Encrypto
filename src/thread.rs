@@ -34,10 +34,8 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
     let encrypted_file_path = directory_path.join(encrypted_file_name);
     let packed_file_name = "files.bin";
     let packed_file_path = directory_path.join(packed_file_name);
-
-
-    // Write file information to the file
-    if mode {
+    
+    if mode { //encrypt
         let mut file_infos: Vec<FileInfo> = Vec::new();
         // Collect file information recursively
         collect_file_info(directory_path, &mut file_infos, encrypted_file_name).unwrap();
@@ -57,16 +55,18 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         
         delete_files(file_infos_copy).unwrap();
     }
-    else { //TODO: Rework decrypt logic later
-        //decrypt_file(encrypted_file_path_clone.clone(), packed_file_path.clone(), encryption_key.clone());
-        // match fs::remove_file(encrypted_file_path.clone()) {
-        //     Ok(_) => println!("File deleted successfully {:?}", encrypted_file_path.clone()),
-        //     Err(e) => println!("Error deleting file: {}", e),
-        // }
+    else { //TODO: Rework decrypt logic later //decrypt
+        //decrypt 8bytes
+        
+        //read header for header size
+        
+        //collect info
+        
+        //decrypt files
 
         let mut file = File::open(encrypted_file_path.clone()).unwrap();
         let mut file_infos: Vec<FileInfo> = Vec::new();
-        read_file_info(&mut file_infos, &mut file).ok();
+        let header_len = read_file_info(&mut file_infos, &mut file);
 
         drop(file);
 
@@ -131,11 +131,20 @@ fn get_raw_file_info(file_infos: &[FileInfo]) -> Vec<u8> {
         header.extend_from_slice(file_info.path.display().to_string().as_bytes());
         header.extend_from_slice(&size_bytes);
     }
-
-    return header;
+    let mut header_with_size_bytes: Vec<u8> = Vec::from((header.len() as u64).to_be_bytes());
+    header_with_size_bytes.extend_from_slice(header.as_slice());
+    
+    return header_with_size_bytes;
 }
 
-fn read_file_info(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Result<(), std::io::Error> {
+fn read_file_info(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> u64 {
+    let mut header_len_bytes = [0; 8];
+    if let Err(_) = input_file.read_exact(&mut header_len_bytes) {
+        // If error occurs while reading, it's likely end of file
+        return 0;
+    }
+    let header_len = u64::from_be_bytes(header_len_bytes);
+    
     loop {
         let mut name_len_bytes = [0; 4];
         if let Err(_) = input_file.read_exact(&mut name_len_bytes) {
@@ -145,20 +154,20 @@ fn read_file_info(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Resu
         let name_len = u32::from_be_bytes(name_len_bytes);
 
         let mut name_bytes = vec![0; name_len as usize];
-        input_file.read_exact(&mut name_bytes)?;
+        input_file.read_exact(&mut name_bytes).unwrap();
 
         let mut path_len_bytes = [0; 4];
-        input_file.read_exact(&mut path_len_bytes)?;
+        input_file.read_exact(&mut path_len_bytes).unwrap();
         let path_len = u32::from_be_bytes(path_len_bytes);
 
         let mut path_bytes = vec![0; path_len as usize];
-        input_file.read_exact(&mut path_bytes)?;
+        input_file.read_exact(&mut path_bytes).unwrap();
 
         let path_str = String::from_utf8(path_bytes).ok().ok_or(stderr());
         let path = path_str.unwrap().as_str().into();
 
         let mut size_bytes = [0; 8];
-        input_file.read_exact(&mut size_bytes)?;
+        input_file.read_exact(&mut size_bytes).unwrap();
         let size = usize::from_be_bytes(size_bytes);
 
         let bytes = Vec::new();
@@ -175,12 +184,12 @@ fn read_file_info(file_infos: &mut Vec<FileInfo>, input_file: &mut File) -> Resu
         file_infos.push(file_info);
     }
 
-    Ok(())
+    header_len
 }
 
 fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) -> bool {
     let mut temp = [0 ; 1];
-    let mut start_pos = 0;
+    let mut start_pos = 8;
     for file_info in file_infos{
 
         start_pos += 16 + file_info.name_len + file_info.path_len;
@@ -330,7 +339,7 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
             thread_manager.execute(move || {
                 let mut block;
                 block = read_16_from_file(&mut file_path_clone.clone(), (i_clone*16)as u64);
-                cipher_clone.clone().expect("REASON").encrypt_block(&mut block);
+                cipher_clone.clone().expect("REASON").encrypt_block(&mut block);               //TODO: Encrypt more data at once!!!
                 thread_shared_map2.lock().unwrap().insert(i_clone as u64, block);
             });
             while thread_manager.job_queue() > 100000 {
