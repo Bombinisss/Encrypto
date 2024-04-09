@@ -7,11 +7,12 @@ use std::thread;
 use std::collections::HashMap;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use aes::Aes256;
+use aes::{Aes256};
 use aes::cipher::{BlockEncrypt, BlockDecrypt, KeyInit, generic_array::GenericArray};
-use aes::cipher::consts::U16;
+use aes::cipher::consts::{U16};
 use sha2::{Digest, Sha256};
 use thread_manager::ThreadManager;
+use array_macro::array;
 #[derive(Debug)]
 #[derive(Clone)]
 struct FileInfo {
@@ -281,19 +282,19 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
         cipher.clone().expect("REASON").encrypt_block(&mut temp);
         
         if i == parts.len()-1 {
-            append_x_to_file(output_file.clone(), temp, last_len).unwrap();
+            append_x_to_file16(output_file.clone(), temp, last_len).unwrap();
             break;
         }
-        append_x_to_file(output_file.clone(), temp, 16).unwrap();
+        append_x_to_file16(output_file.clone(), temp, 16).unwrap();
     }
     
     drop(parts);
 
-    for file in file_infos{
+    for file in file_infos {
         
-        let data_buffer: HashMap<u64, GenericArray<u8, U16>> = HashMap::new();
-        let shared_map: Arc<Mutex<HashMap<u64, GenericArray<u8, U16>>>> = Arc::new(Mutex::new(data_buffer));
-        let number_of_blocks = div_up(file.size,16);
+        let data_buffer: HashMap<u64, [u8; 2048]> = HashMap::new();
+        let shared_map: Arc<Mutex<HashMap<u64, [u8; 2048]>>> = Arc::new(Mutex::new(data_buffer));
+        let number_of_blocks = div_up(file.size,2048);
         let output_file_copy = output_file.clone();
 
         let thread_shared_map = Arc::clone(&shared_map);
@@ -315,14 +316,14 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
                 if block_copy.is_none() { sleep(Duration::from_millis(10)); continue; }
                 let data = block_copy.unwrap();
                 
-                if blocks_to_write==1 && file_size_copy%16!=0 {
-                    let x = file_size_copy%16;
+                if blocks_to_write==1 && file_size_copy%2048!=0 {
+                    let x = file_size_copy%2048;
                     append_x_to_file_fast(&mut file, data, x).unwrap();
                     counter+=1;
                     blocks_to_write-=1;
                     continue;
                 }
-                append_x_to_file_fast(&mut file, data, 16).unwrap();
+                append_x_to_file_fast(&mut file, data, 2048).unwrap();
                 thread_shared_map.lock().unwrap().remove(&counter).unwrap();
                 
                 counter+=1;
@@ -337,10 +338,29 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
             let thread_shared_map2 = Arc::clone(&shared_map);
             // Submit job for execution
             thread_manager.execute(move || {
-                let mut block;
-                block = read_16_from_file(&mut file_path_clone.clone(), (i_clone*16)as u64);
-                cipher_clone.clone().expect("REASON").encrypt_block(&mut block);               //TODO: Encrypt more data at once!!!
-                thread_shared_map2.lock().unwrap().insert(i_clone as u64, block);
+                let block;
+                block = read_2048_from_file(&mut file_path_clone.clone(), (i_clone*2048)as u64);
+
+                // Convert the original array into an array of GenericArrays
+                let mut blocks_16: [GenericArray<u8, U16>; 128] = array![_ => GenericArray::from([0u8; 16]); 128];
+                for i in 0..128 {
+                    let start_index = i * 16;
+                    let end_index = start_index + 16;
+                    let slice = &block[start_index..end_index];
+                    let generic_array = GenericArray::clone_from_slice(slice);
+                    blocks_16[i] = generic_array;
+                }
+                
+                cipher_clone.clone().expect("REASON").encrypt_blocks(&mut blocks_16);
+
+                // Convert the array of GenericArrays into a single array of bytes
+                let mut finished_array: [u8; 2048] = [0; 2048];
+                for i in 0..128 {
+                    let start_index = i * 16;
+                    finished_array[start_index..start_index + 16].copy_from_slice(&blocks_16[i]);
+                }
+                
+                thread_shared_map2.lock().unwrap().insert(i_clone as u64, finished_array);
             });
             while thread_manager.job_queue() > 100000 {
                 sleep(Duration::from_millis(10))
@@ -372,7 +392,7 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
         let output_file_path_clone = output_file.clone(); // Clone output_file_path for each thread
         let thread_join_handle = thread::spawn(move || {
             let temp_file_path = output_file_path_clone.clone();
-            append_x_to_file(temp_file_path, buffer, 16).unwrap();
+            append_x_to_file16(temp_file_path, buffer, 16).unwrap();
         });
         thread_join_handle.join().expect("TODO: Thread panicked");
     }
@@ -381,9 +401,9 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
     Some(true)
 }
 
-fn append_x_to_file_fast(file: &mut File, data: GenericArray<u8, U16>, x: usize) -> std::io::Result<()> {
+fn append_x_to_file_fast(file: &mut File, data: [u8; 2048], x: usize) -> std::io::Result<()> {
 
-    if x!=16 {
+    if x!=2048 {
         let mut temp = data.to_vec();
         temp.truncate(x as usize);
         file.write_all(&temp)?;
@@ -394,7 +414,7 @@ fn append_x_to_file_fast(file: &mut File, data: GenericArray<u8, U16>, x: usize)
 
     Ok(())
 }
-fn append_x_to_file(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) -> std::io::Result<()> {
+fn append_x_to_file16(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) -> std::io::Result<()> {
     // Open the file in append mode, creating it if it doesn't exist.
     let mut file = OpenOptions::new()
         .create(true)
@@ -413,7 +433,7 @@ fn append_x_to_file(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) ->
     Ok(())
 }
 
-fn read_16_from_file(filename: &mut PathBuf, at: u64) -> GenericArray<u8, U16> {
+fn read_2048_from_file(filename: &mut PathBuf, at: u64) -> [u8; 2048] {
     // Open the file in append mode, creating it if it doesn't exist.
     let mut file = OpenOptions::new()
         .create(false)
@@ -422,9 +442,9 @@ fn read_16_from_file(filename: &mut PathBuf, at: u64) -> GenericArray<u8, U16> {
         .open(filename).unwrap();
     file.seek(SeekFrom::Start(at)).unwrap();
 
-    let mut data = GenericArray::from([0u8; 16]);
+    let mut data: [u8; 2048] = [0; 2048];
     // Write the data to the file.
-    file.read(&mut data).unwrap();
+    let count = file.read(&mut data).unwrap();
 
     return data;
 }
