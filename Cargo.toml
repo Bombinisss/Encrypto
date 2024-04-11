@@ -32,10 +32,10 @@ opt-level = 3
 opt-level = 3
 
 [profile.release]
-opt-level = 0
+opt-level = 3
 
 [profile.dev]
-opt-level = 0
+opt-level = 3
 
 [build-dependencies]
 winres = "0.1.12"

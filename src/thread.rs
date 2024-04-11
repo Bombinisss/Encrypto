@@ -292,9 +292,8 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
 
     for file in file_infos {
         
-        let data_buffer: HashMap<u64, [u8; 72000]> = HashMap::new();
-        let shared_map: Arc<Mutex<HashMap<u64, [u8; 72000]>>> = Arc::new(Mutex::new(data_buffer));
-        let number_of_blocks = div_up(file.size,72000);
+        let shared_map: Arc<Mutex<HashMap<u64, Box<[u8; 560000]>>>> = Arc::new(Mutex::new(HashMap::new())); // TODO: Increase size MORE
+        let number_of_blocks = div_up(file.size,560000);
         let output_file_copy = output_file.clone();
 
         let thread_shared_map = Arc::clone(&shared_map);
@@ -311,19 +310,36 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
             
             while blocks_to_write!=0 {
                 
-                let block_copy = thread_shared_map.lock().unwrap().get(&counter).copied();
+                //let block_copy = thread_shared_map.lock().unwrap().get(&counter).copied();
                 
-                if block_copy.is_none() { continue; }
-                let data = block_copy.unwrap();
+                if thread_shared_map.lock().unwrap().get(&counter).is_none() { continue; }
+
+                let data = **thread_shared_map.lock().unwrap().get(&counter).unwrap();
+                //let data = block_copy.unwrap();
                 
-                if blocks_to_write==1 && file_size_copy%72000!=0 {
-                    let x = file_size_copy%72000;
-                    append_x_to_file_fast(&mut file, data, x).unwrap();
+                if blocks_to_write==1 && file_size_copy%560000!=0 {
+                    let x = file_size_copy%560000;
+                    //append_x_to_file_fast(&mut file, data, x).unwrap();
+                    if x!=560000 {
+                        let mut temp = data.to_vec();
+                        temp.truncate(x as usize);
+                        file.write_all(&temp).unwrap();
+                    }
+                    // Write the data to the file.
+                    file.write_all(&data).unwrap();
                     counter+=1;
                     blocks_to_write-=1;
                     continue;
                 }
-                append_x_to_file_fast(&mut file, data, 72000).unwrap();
+                //append_x_to_file_fast(&mut file, data, 560000).unwrap();
+                let x = 560000;
+                if x!=560000 {
+                    let mut temp = data.to_vec();
+                    temp.truncate(x as usize);
+                    file.write_all(&temp).unwrap();
+                }
+                // Write the data to the file.
+                file.write_all(&data).unwrap();
                 thread_shared_map.lock().unwrap().remove(&counter).unwrap();
                 
                 counter+=1;
@@ -338,12 +354,21 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
             let thread_shared_map2 = Arc::clone(&shared_map);
             // Submit job for execution
             thread_manager.execute(move || {
-                let block;
-                block = read_72000_from_file(&mut file_path_clone.clone(), (i_clone*72000)as u64);
+                
+                let at = (i_clone*560000) as u64;
+                let mut file = OpenOptions::new()
+                    .create(false)
+                    .append(false)
+                    .read(true)
+                    .open(file_path_clone.clone()).unwrap();
+                file.seek(SeekFrom::Start(at)).unwrap();
+
+                let mut block: Box<[u8; 560000]> = Box::new([0; 560000]);
+                let _count = file.read(&mut *block).unwrap();
 
                 // Convert the original array into an array of GenericArrays
-                let mut blocks_16: [GenericArray<u8, U16>; 4500] = array![_ => GenericArray::from([0u8; 16]); 4500];
-                for i in 0..4500 {
+                let mut blocks_16: Box<[GenericArray<u8, U16>; 35000]> = Box::new(array![_ => GenericArray::from([0u8; 16]); 35000]);
+                for i in 0..35000 {
                     let start_index = i * 16;
                     let end_index = start_index + 16;
                     let slice = &block[start_index..end_index];
@@ -351,18 +376,19 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
                     blocks_16[i] = generic_array;
                 }
                 
-                cipher_clone.clone().expect("REASON").encrypt_blocks(&mut blocks_16);
+                cipher_clone.clone().expect("REASON").encrypt_blocks(&mut *blocks_16);
 
                 // Convert the array of GenericArrays into a single array of bytes
-                let mut finished_array: [u8; 72000] = [0; 72000];
-                for i in 0..4500 {
+                let mut finished_array: Box<[u8; 560000]> = Box::new([0; 560000]);
+                for i in 0..35000 {
                     let start_index = i * 16;
                     finished_array[start_index..start_index + 16].copy_from_slice(&blocks_16[i]);
                 }
                 
+                //thread_shared_map2.lock().unwrap().insert(i_clone as u64, *finished_array); // STACK OVERFLOW HERE
                 thread_shared_map2.lock().unwrap().insert(i_clone as u64, finished_array);
             });
-            while thread_manager.job_queue() > 1000000 {
+            while thread_manager.job_queue() > 10000000 {
                 sleep(Duration::from_millis(10))
             }
         }
@@ -401,19 +427,6 @@ fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<S
     Some(true)
 }
 
-fn append_x_to_file_fast(file: &mut File, data: [u8; 72000], x: usize) -> std::io::Result<()> {
-
-    if x!=72000 {
-        let mut temp = data.to_vec();
-        temp.truncate(x as usize);
-        file.write_all(&temp)?;
-        return Ok(());
-    }
-    // Write the data to the file.
-    file.write_all(&data)?;
-
-    Ok(())
-}
 fn append_x_to_file16(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) -> std::io::Result<()> {
     // Open the file in append mode, creating it if it doesn't exist.
     let mut file = OpenOptions::new()
@@ -431,22 +444,6 @@ fn append_x_to_file16(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) 
     file.write_all(&data)?;
 
     Ok(())
-}
-
-fn read_72000_from_file(filename: &mut PathBuf, at: u64) -> [u8; 72000] {
-    // Open the file in append mode, creating it if it doesn't exist.
-    let mut file = OpenOptions::new()
-        .create(false)
-        .append(false)
-        .read(true)
-        .open(filename).unwrap();
-    file.seek(SeekFrom::Start(at)).unwrap();
-
-    let mut data: [u8; 72000] = [0; 72000];
-    // Write the data to the file.
-    let count = file.read(&mut data).unwrap();
-
-    return data;
 }
 
 pub fn div_up(a: usize, b: usize) -> usize {
