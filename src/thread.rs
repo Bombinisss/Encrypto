@@ -40,9 +40,9 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         let mut file_infos: Vec<FileInfo> = Vec::new();
         // Collect file information recursively
         collect_file_info(directory_path, &mut file_infos, encrypted_file_name).unwrap();
-        if file_infos.len()==0 { 
+        if file_infos.len()==0 {
             println!("No files to encrypt!");
-            return Some(true); 
+            return Some(false);
         }
 
         let header = get_raw_file_info(&file_infos);
@@ -56,32 +56,43 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         
         delete_files(file_infos_copy).unwrap();
     }
-    else { //TODO: Rework decrypt logic later //decrypt
-        //decrypt 8bytes
+    else { //TODO: Rework decrypt logic
         
+        //check if file exists
+        if fs::metadata(encrypted_file_path.clone()).is_err() {
+            println!("File does not exist!");
+            return Some(false)
+        }
+
         //read header for header size
+        let header_len = get_header_len(encrypted_file_path.clone(), encryption_key.clone());
+        println!("{}", header_len);
         
         //collect info
+        let mut file_infos: Vec<FileInfo> = Vec::new();
+        collect_info_from_header(encrypted_file_path.clone(), encryption_key.clone(), &mut file_infos);
         
         //decrypt files
+        //TODO: decrypt each file from file_infos and save multi-threaded
+        
 
-        let mut file = File::open(encrypted_file_path.clone()).unwrap();
-        let mut file_infos: Vec<FileInfo> = Vec::new();
-        let header_len = read_file_info(&mut file_infos, &mut file);
-
-        drop(file);
-
-        let mut file = File::open(encrypted_file_path.clone()).unwrap();
-        match read_file_data_n_unpack(&mut file_infos, &mut file) {
-            true => {
-                println!("File read successfully");
-                match fs::remove_file(packed_file_path.clone()) {
-                    Ok(_) => println!("File deleted successfully {:?}", packed_file_path.clone()),
-                    Err(e) => println!("Error deleting file: {}", e),
-                }
-            },
-            false => println!("Error reading file!"),
-        }
+        // let mut file = File::open(encrypted_file_path.clone()).unwrap();
+        // let mut file_infos: Vec<FileInfo> = Vec::new();
+        // let header_len = read_file_info(&mut file_infos, &mut file);
+        // 
+        // drop(file);
+        // 
+        // let mut file = File::open(encrypted_file_path.clone()).unwrap();
+        // match read_file_data_n_unpack(&mut file_infos, &mut file) {
+        //     true => {
+        //         println!("File read successfully");
+        //         match fs::remove_file(packed_file_path.clone()) {
+        //             Ok(_) => println!("File deleted successfully {:?}", packed_file_path.clone()),
+        //             Err(e) => println!("Error deleting file: {}", e),
+        //         }
+        //     },
+        //     false => println!("Error reading file!"),
+        // }
     }
 
     return Some(true)
@@ -132,7 +143,7 @@ fn get_raw_file_info(file_infos: &[FileInfo]) -> Vec<u8> {
         header.extend_from_slice(file_info.path.display().to_string().as_bytes());
         header.extend_from_slice(&size_bytes);
     }
-    let mut header_with_size_bytes: Vec<u8> = Vec::from((header.len() as u64).to_be_bytes());
+    let mut header_with_size_bytes: Vec<u8> = Vec::from((header.len() as u64).to_be_bytes()); // 8 bytes (u64)
     header_with_size_bytes.extend_from_slice(header.as_slice());
     
     return header_with_size_bytes;
@@ -399,6 +410,40 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
     println!("finished encrypt");
     
     Some(true)
+}
+
+fn get_header_len(input_file: PathBuf, encryption_key: Arc<String>) -> u64 {
+
+    let key = string_to_key(encryption_key.as_str());
+    let cipher = Aes256::new_from_slice(&key);
+
+    let mut file = OpenOptions::new()
+        .create(false)
+        .append(false)
+        .read(true)
+        .open(input_file).unwrap();
+
+    let mut block = GenericArray::from([0u8; 16]);
+    
+    file.read(&mut block).unwrap();
+    
+    cipher.clone().expect("REASON").decrypt_block(&mut block);
+
+    // Convert GenericArray<u8, U16> to u64
+    let mut result: u64 = 0;
+    for (i, &byte) in block.iter().enumerate() {
+        // Ensure we don't shift more than 64 bits
+        if i < 8 {
+            // Shift each byte by 8 * (7 - i) bits and bitwise OR it with the result
+            result |= (byte as u64) << (8 * (7 - i));
+        }
+    }
+    
+    return result;
+}
+
+fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, file_infos: &mut Vec<FileInfo>){
+    //TODO: make this
 }
 
 fn decrypt_file(input_file: PathBuf, output_file: PathBuf, encryption_key: Arc<String>) -> Option<bool> {
