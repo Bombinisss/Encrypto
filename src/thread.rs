@@ -1,6 +1,6 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{Write, Read, SeekFrom, Seek, Cursor, ErrorKind};
-use std::os::windows::fs::{FileExt, MetadataExt};
+use std::os::windows::fs::{MetadataExt};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::{io};
@@ -19,9 +19,6 @@ struct FileInfo {
     name: String,
     path: PathBuf,
     size: u64,
-    bytes: Vec<u8>,
-    name_len: usize,
-    path_len: usize,
 }
 
 pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -> Option<bool> {
@@ -33,8 +30,6 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
     
     let encrypted_file_name = "files.encrypto";
     let encrypted_file_path = directory_path.join(encrypted_file_name);
-    let packed_file_name = "files.bin";
-    let packed_file_path = directory_path.join(packed_file_name);
     
     if mode { //encrypt
         let mut file_infos: Vec<FileInfo> = Vec::new();
@@ -70,6 +65,7 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         //collect info
         let mut file_infos: Vec<FileInfo> = Vec::new();
         collect_info_from_header(encrypted_file_path.clone(), encryption_key.clone(), &mut file_infos, header_len);
+        println!("{:?}", file_infos);
         
         //decrypt files
         //TODO: decrypt each file from file_infos and save multi-threaded
@@ -115,9 +111,6 @@ fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>, output_file_na
                 name: entry.file_name().to_str().unwrap().to_string(),
                 path: entry.path(),
                 size: metadata.file_size(),
-                bytes: vec![],
-                name_len: 0,
-                path_len: 0,
             };
             file_infos.push(file_info);
         }
@@ -146,36 +139,6 @@ fn get_raw_file_info(file_infos: &[FileInfo]) -> Vec<u8> {
     header_with_size_bytes.extend_from_slice(header.as_slice());
     
     return header_with_size_bytes;
-}
-fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) -> bool {
-    let mut temp = [0 ; 1];
-    let mut start_pos = 8;
-    for file_info in file_infos{
-
-        start_pos += 16 + file_info.name_len + file_info.path_len;
-    }
-    if start_pos == 0 { return false; }
-    start_pos-=1;
-    input_file.seek_read(&mut temp, start_pos as u64).expect("Seek read fail!");
-
-    for file_info in file_infos {
-        let mut bytes = vec![0; file_info.size as usize];
-        if let Err(_) = input_file.read_exact(&mut bytes) {
-            // If error occurs while reading, it's likely end of file
-            break;
-        }
-
-        create_file_from_data(file_info, bytes).unwrap();
-    }
-
-    true
-}
-
-fn create_file_from_data(file_info: &FileInfo, data: Vec<u8>) -> Result<(), std::io::Error>{
-    let mut file = File::create(file_info.path.clone()).unwrap();
-    file.write_all(&*data).unwrap();
-
-    Ok(())
 }
 
 fn delete_files(file_infos: Vec<FileInfo>) -> Result<(), std::io::Error>{
@@ -225,22 +188,17 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
         })
         .collect();
     // If there are remaining bytes, push them as a separate part
-    let mut last_len: usize = 16;
     if !header.is_empty() && header.len() % 16 != 0 {
         let remainder = &header[header.len() - (header.len() % 16)..];
         let mut arr = GenericArray::from([0u8; 16]);
-        last_len = remainder.len();
         arr[..remainder.len()].copy_from_slice(remainder);
         parts.push(arr);
     }
     
     
-    for (i, part) in parts.iter().enumerate() {
-        //println!("Part {}: {:?}, last len:{}", i, part, last_len);
+    for part in parts.iter() {
         let mut temp = part.clone();
-        println!("{:?}", temp);
         cipher.clone().expect("REASON").encrypt_block(&mut temp);
-        println!("{:?}", temp);
         
         append_x_to_file16(output_file.clone(), temp, 16).unwrap();
     }
@@ -428,9 +386,6 @@ fn read_file_info(file_infos: &mut Vec<FileInfo>, data: &[u8]) {
                 .map_err(|e| io::Error::new(ErrorKind::InvalidData, e)).expect("REASON"),
             path,
             size,
-            bytes: vec![],
-            name_len: name_len as usize,
-            path_len: path_len as usize,
         };
 
         file_infos.push(file_info);
