@@ -147,54 +147,6 @@ fn get_raw_file_info(file_infos: &[FileInfo]) -> Vec<u8> {
     
     return header_with_size_bytes;
 }
-
-fn read_file_info(file_infos: &mut Vec<FileInfo>, data: &[u8]) {
-    let mut cursor = Cursor::new(data);
-
-    let mut header_len_bytes = [0; 8];
-    cursor.read_exact(&mut header_len_bytes).expect("REASON");
-    let header_len = u64::from_be_bytes(header_len_bytes);
-
-    loop {
-        if cursor.position() >= header_len{
-            break;
-        }
-        let mut name_len_bytes = [0; 4];
-        cursor.read_exact(&mut name_len_bytes).expect("REASON");
-        let name_len = u32::from_be_bytes(name_len_bytes);
-
-        let mut name_bytes = vec![0; name_len as usize];
-        cursor.read_exact(&mut name_bytes).expect("REASON");
-
-        let mut path_len_bytes = [0; 4];
-        cursor.read_exact(&mut path_len_bytes).expect("REASON");
-
-        let path_len = u32::from_be_bytes(path_len_bytes);
-        let mut path_bytes = vec![0; path_len as usize];
-        cursor.read_exact(&mut path_bytes).expect("REASON");
-
-        let path_str = String::from_utf8(path_bytes)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e)).expect("REASON");
-        let path = PathBuf::from(path_str);
-
-        let mut size_bytes = [0; 8];
-        cursor.read_exact(&mut size_bytes).expect("REASON");
-        let size: u64 = u64::from_be_bytes(size_bytes);
-
-        let file_info = FileInfo {
-            name: String::from_utf8(name_bytes)
-                .map_err(|e| io::Error::new(ErrorKind::InvalidData, e)).expect("REASON"),
-            path,
-            size,
-            bytes: vec![],
-            name_len: name_len as usize,
-            path_len: path_len as usize,
-        };
-
-        file_infos.push(file_info);
-    }
-}
-
 fn read_file_data_n_unpack(file_infos: &Vec<FileInfo>, input_file: &mut File) -> bool {
     let mut temp = [0 ; 1];
     let mut start_pos = 8;
@@ -286,12 +238,10 @@ fn encrypt_files(output_file: PathBuf, encryption_key: Arc<String>, file_infos: 
     for (i, part) in parts.iter().enumerate() {
         //println!("Part {}: {:?}, last len:{}", i, part, last_len);
         let mut temp = part.clone();
+        println!("{:?}", temp);
         cipher.clone().expect("REASON").encrypt_block(&mut temp);
+        println!("{:?}", temp);
         
-        if i == parts.len()-1 {
-            append_x_to_file16(output_file.clone(), temp, last_len).unwrap();
-            break;
-        }
         append_x_to_file16(output_file.clone(), temp, 16).unwrap();
     }
     
@@ -440,10 +390,57 @@ fn get_header_len(input_file: PathBuf, encryption_key: Arc<String>) -> u64 {
     
     return result;
 }
+fn read_file_info(file_infos: &mut Vec<FileInfo>, data: &[u8]) {
+    let mut cursor = Cursor::new(data);
 
+    let mut header_len_bytes = [0; 8];
+    cursor.read_exact(&mut header_len_bytes).expect("REASON");
+    let header_len = u64::from_be_bytes(header_len_bytes);
+
+    loop {
+        if cursor.position() >= header_len{
+            break;
+        }
+        let mut name_len_bytes = [0; 4];
+        cursor.read_exact(&mut name_len_bytes).expect("REASON");
+        let name_len = u32::from_be_bytes(name_len_bytes);
+
+        let mut name_bytes = vec![0; name_len as usize];
+        cursor.read_exact(&mut name_bytes).expect("REASON");
+
+        let mut path_len_bytes = [0; 4];
+        cursor.read_exact(&mut path_len_bytes).expect("REASON");
+
+        let path_len = u32::from_be_bytes(path_len_bytes);
+        let mut path_bytes = vec![0; path_len as usize];
+        cursor.read_exact(&mut path_bytes).expect("REASON");
+
+        let path_str = String::from_utf8(path_bytes)
+            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e)).expect("REASON");
+        let path = PathBuf::from(path_str);
+
+        let mut size_bytes = [0; 8];
+        cursor.read_exact(&mut size_bytes).expect("REASON");
+        let size: u64 = u64::from_be_bytes(size_bytes);
+
+        let file_info = FileInfo {
+            name: String::from_utf8(name_bytes)
+                .map_err(|e| io::Error::new(ErrorKind::InvalidData, e)).expect("REASON"),
+            path,
+            size,
+            bytes: vec![],
+            name_len: name_len as usize,
+            path_len: path_len as usize,
+        };
+
+        file_infos.push(file_info);
+    }
+}
 fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, file_infos: &mut Vec<FileInfo>, mut header_len: u64){
-    //TODO: make this
     header_len = header_len + 8;
+    header_len = (div_up(header_len as usize, 16) as u64) * 16;
+    
+    
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
 
@@ -454,6 +451,7 @@ fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, fi
         .open(input_file).unwrap();
 
     let mut header = vec![];
+    
     header.resize(header_len as usize, 0);
 
     file.read(&mut header).unwrap();
@@ -468,7 +466,6 @@ fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, fi
         })
         .collect();
     // If there are remaining bytes, push them as a separate part
-    let mut last_len: usize = 16;
     if !header.is_empty() && header.len() % 16 != 0 {
         let remainder = &header[header.len() - (header.len() % 16)..];
         let mut arr = GenericArray::from([0u8; 16]);
@@ -478,7 +475,7 @@ fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, fi
 
     let mut decrypted_header: Vec<GenericArray<u8, U16>> = vec![];
     
-    for (i, part) in parts.iter().enumerate() {
+    for part in parts.iter() {
         //println!("Part {}: {:?}, last len:{}", i, part, last_len);
         let mut temp = part.clone();
         cipher.clone().expect("REASON").decrypt_block(&mut temp);
@@ -492,10 +489,8 @@ fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, fi
     for array in decrypted_header {
         merged_header.extend_from_slice(&array[..]);
     }
-
-    read_file_info(file_infos, &merged_header);
     
-    println!("{:#?}", file_infos);
+    read_file_info(file_infos, &merged_header);
 }
 
 fn append_x_to_file16(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) -> std::io::Result<()> {
