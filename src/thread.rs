@@ -113,7 +113,6 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
 
                 if blocks_to_write==1 && file_size_copy%560000!=0 {
                     let x = file_size_copy%560000;
-                    //append_x_to_file_fast(&mut file, data, x).unwrap();
                     if x!=560000 {
                         let mut temp = data.to_vec();
                         temp.truncate(x as usize);
@@ -157,9 +156,10 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
 
                 let mut block: Box<[u8; 560000]> = Box::new([0; 560000]);
                 let file_size_copy = file.size.clone();
-                let read_size = file_size_copy%560000;
+                let mut read_size = file_size_copy%560000;
                 let mut file_obj2;
                 if number_of_blocks_clone - i_clone == 1 && read_size !=0 {
+                    read_size = (div_up(read_size as usize, 16) as u64) * 16;
                     file_obj2 = file_obj.take(read_size);
                     let _count = file_obj2.read(&mut *block).unwrap();
                 }
@@ -178,7 +178,7 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
                 }
 
                 cipher_clone.clone().expect("REASON").decrypt_blocks(&mut *blocks_16);
-
+                
                 // Convert the array of GenericArrays into a single array of bytes
                 let mut finished_array: Box<[u8; 560000]> = Box::new([0; 560000]);
                 for i in 0..35000 {
@@ -339,8 +339,8 @@ fn encrypt_files(output_file_path: PathBuf, encryption_key: Arc<String>, file_in
                 let data = **thread_shared_map.lock().unwrap().get(&counter).unwrap();
                 
                 if blocks_to_write==1 && file_size_copy%560000!=0 {
-                    let x = file_size_copy%560000;
-                    //append_x_to_file_fast(&mut file, data, x).unwrap();
+                    let mut x = file_size_copy%560000;
+                    x = (div_up(x as usize, 16) as u64) * 16;
                     if x!=560000 {
                         let mut temp = data.to_vec();
                         temp.truncate(x as usize);
