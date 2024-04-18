@@ -51,27 +51,23 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         
         delete_files(file_infos_copy);
     }
-    else { //TODO: Rework decrypt logic
-        
+    else {
         //check if file exists
         if fs::metadata(encrypted_file_path.clone()).is_err() {
-            println!("File does not exist!");
+            println!("Encrypted file does not exist!");
             return Some(false)
         }
 
         //read header for header size
-        let header_len = get_header_len(encrypted_file_path.clone(), encryption_key.clone());
-        
+        let mut header_len = get_header_len(encrypted_file_path.clone(), encryption_key.clone());
         //collect info
         let mut file_infos: Vec<FileInfo> = Vec::new();
-        collect_info_from_header(encrypted_file_path.clone(), encryption_key.clone(), &mut file_infos, header_len);
+        collect_info_from_header(encrypted_file_path.clone(), encryption_key.clone(), &mut file_infos, &mut header_len);
         println!("{:?}", file_infos);
         
         //decrypt files
-        //TODO: decrypt each file from file_infos and save multi-threaded
-
         let start_time = Instant::now();
-        //decrypt_files(encrypted_file_path.clone(), encryption_key.clone(), file_infos);
+        decrypt_files(encrypted_file_path.clone(), encryption_key.clone(), file_infos, header_len);
         let end_time = Instant::now();
         let elapsed_time = end_time.duration_since(start_time);
         println!("Time taken: {:?}", elapsed_time);
@@ -84,24 +80,128 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
 
     return Some(true)
 }
-/*fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>) {
+fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>, header_len: u64) -> Option<bool> {
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
     let num_threads = num_cpus::get();
 
     let thread_manager = ThreadManager::<()>::new(num_threads-1);
-    let saver_thread_manager = ThreadManager::<()>::new(1);
+    let saver_thread_manager = ThreadManager::<()>::new(num_threads/2);
+    let mut header_len_mod = header_len;
     
     for file in file_infos {
-        
+
         let shared_map: Arc<Mutex<HashMap<u64, Box<[u8; 560000]>>>> = Arc::new(Mutex::new(HashMap::new())); // TODO: Increase size MORE
         let number_of_blocks = div_up(file.size as usize, 560000);
         let output_file = file.path.clone();
         let thread_shared_map = Arc::clone(&shared_map);
         
+        saver_thread_manager.execute(move || { //Saver thread which waits for elements in order
+            let mut blocks_to_write = number_of_blocks.clone();
+            let temp_file_path = output_file.clone();
+            let mut counter: u64 = 0;
+            let file_size_copy = file.size.clone();
+            // Open the file in append mode, creating it if it doesn't exist.
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(temp_file_path.clone()).unwrap();
+
+            while blocks_to_write!=0 {
+                if thread_shared_map.lock().unwrap().get(&counter).is_none() { continue; }
+                let data = **thread_shared_map.lock().unwrap().get(&counter).unwrap();
+
+                if blocks_to_write==1 && file_size_copy%560000!=0 {
+                    let x = file_size_copy%560000;
+                    //append_x_to_file_fast(&mut file, data, x).unwrap();
+                    if x!=560000 {
+                        let mut temp = data.to_vec();
+                        temp.truncate(x as usize);
+                        file.write_all(&temp).unwrap();
+                        counter+=1;
+                        blocks_to_write-=1;
+                        continue;
+                    }
+                    // Write the data to the file.
+                    file.write_all(&data).unwrap();
+                    counter+=1;
+                    blocks_to_write-=1;
+                    continue;
+                }
+
+                // Write the data to the file.
+                file.write_all(&data).unwrap();
+                thread_shared_map.lock().unwrap().remove(&counter).unwrap();
+                counter+=1;
+                blocks_to_write-=1;
+            }
+        });
+
         
+        for i in 0..number_of_blocks {
+            let i_clone = i.clone();
+            let file_path_clone = input_path.clone();
+            let cipher_clone = cipher.clone();
+            let thread_shared_map2 = Arc::clone(&shared_map);
+            let number_of_blocks_clone = number_of_blocks.clone();
+            // Submit job for execution
+            thread_manager.execute(move || {
+                
+                let at = header_len_mod + (i_clone*560000) as u64;
+                let mut file_obj = OpenOptions::new()
+                    .create(false)
+                    .append(false)
+                    .read(true)
+                    .open(file_path_clone.clone()).unwrap();
+                file_obj.seek(SeekFrom::Start(at)).unwrap();
+
+                let mut block: Box<[u8; 560000]> = Box::new([0; 560000]);
+                let file_size_copy = file.size.clone();
+                let read_size = file_size_copy%560000;
+                let mut file_obj2;
+                if number_of_blocks_clone - i_clone == 1 && read_size !=0 {
+                    file_obj2 = file_obj.take(read_size);
+                    let _count = file_obj2.read(&mut *block).unwrap();
+                }
+                else{
+                    let _count = file_obj.read(&mut *block).unwrap();
+                }
+                
+                // Convert the original array into an array of GenericArrays
+                let mut blocks_16: Box<[GenericArray<u8, U16>; 35000]> = Box::new(array![_ => GenericArray::from([0u8; 16]); 35000]);
+                for i in 0..35000 {
+                    let start_index = i * 16;
+                    let end_index = start_index + 16;
+                    let slice = &block[start_index..end_index];
+                    let generic_array = GenericArray::clone_from_slice(slice);
+                    blocks_16[i] = generic_array;
+                }
+
+                cipher_clone.clone().expect("REASON").decrypt_blocks(&mut *blocks_16);
+
+                // Convert the array of GenericArrays into a single array of bytes
+                let mut finished_array: Box<[u8; 560000]> = Box::new([0; 560000]);
+                for i in 0..35000 {
+                    let start_index = i * 16;
+                    finished_array[start_index..start_index + 16].copy_from_slice(&blocks_16[i]);
+                }
+
+                //thread_shared_map2.lock().unwrap().insert(i_clone as u64, *finished_array); // STACK OVERFLOW HERE
+                thread_shared_map2.lock().unwrap().insert(i_clone as u64, finished_array);
+            });
+            while thread_manager.job_queue() > 10000000 {
+                sleep(Duration::from_millis(10))
+            }
+        }
+        header_len_mod+=file.size;
     }
-}*/
+
+    thread_manager.join();
+    saver_thread_manager.join();
+    println!("finished decrypt");
+
+    Some(true)
+}
 fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>, output_file_name: &str) -> Result<(), std::io::Error> {
     for entry in fs::read_dir(path)? {
         let entry = entry?;
@@ -389,11 +489,12 @@ fn read_file_info(file_infos: &mut Vec<FileInfo>, data: &[u8]) {
         file_infos.push(file_info);
     }
 }
-fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, file_infos: &mut Vec<FileInfo>, mut header_len: u64){
-    header_len = header_len + 8;
-    header_len = (div_up(header_len as usize, 16) as u64) * 16;
-    println!("{}", header_len);
-    
+fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, file_infos: &mut Vec<FileInfo>, header_len: &mut u64){
+    let mut temp_header_len = *header_len;
+
+    temp_header_len = temp_header_len + 8;
+    temp_header_len = (div_up(temp_header_len as usize, 16) as u64) * 16;
+    *header_len = temp_header_len.clone();
     
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
@@ -406,7 +507,7 @@ fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, fi
 
     let mut header = vec![];
     
-    header.resize(header_len as usize, 0);
+    header.resize(temp_header_len as usize, 0);
 
     file.read(&mut header).unwrap();
 
