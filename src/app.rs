@@ -1,6 +1,8 @@
 use std::thread;
 use crate::thread::pack_n_encrypt;
 use std::sync::{Arc, Mutex};
+use std::thread::sleep;
+use std::time::Duration;
 use egui_file_dialog::FileDialog;
 
 /// We derive Deserialize/Serialize, so we can persist app state on shutdown.
@@ -60,13 +62,21 @@ impl eframe::App for EncryptoInterface {
                 rect.max.y = rect.min.y + title_bar_height;
                 rect
             };
-            title_bar_ui(ui, title_bar_rect, "Encrypto");
+            ui.add_enabled_ui(!*self.in_progress.lock().unwrap(), |ui| {
+                title_bar_ui(ui, title_bar_rect, "Encrypto");
+            });
             // The top panel is often a good place for a menu bar:
 
             egui::menu::bar(ui, |ui| {
 
                 ui.menu_button("File", |ui| {
                     if ui.button("Quit").clicked() {
+                        loop {
+                            if *self.in_progress.lock().unwrap()==false {
+                                break
+                            }
+                            else { sleep(Duration::from_millis(1000)) }
+                        }
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
@@ -99,7 +109,7 @@ impl eframe::App for EncryptoInterface {
                     }
                     ui.label(&selected_text);
                     ui.label("  ");
-                    ui.add_enabled_ui(!self.in_progress.lock().unwrap().clone(), |ui| {
+                    ui.add_enabled_ui(!*self.in_progress.lock().unwrap(), |ui| {
                         if toggle_ui(ui, &mut self.encryption_state).clicked(){
                             println!("clicked");
                             let encryption_key = Arc::new(self.encryption_key.clone());
