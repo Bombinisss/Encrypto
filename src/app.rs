@@ -1,6 +1,6 @@
 use std::thread;
 use crate::thread::pack_n_encrypt;
-use std::sync::{Arc};
+use std::sync::{Arc, Mutex};
 use egui_file_dialog::FileDialog;
 
 /// We derive Deserialize/Serialize, so we can persist app state on shutdown.
@@ -13,6 +13,8 @@ pub struct EncryptoInterface {
     encryption_key: String,
     #[serde(skip)]
     file_dialog: FileDialog,
+    #[serde(skip)]
+    in_progress: Arc<Mutex<bool>>,
 }
 
 impl Default for EncryptoInterface {
@@ -23,6 +25,7 @@ impl Default for EncryptoInterface {
             encryption_state: false,
             encryption_key: "".to_owned(),
             file_dialog: FileDialog::new().min_size([595.0, 375.0]).max_size([595.0, 375.0]).resizable(false).movable(false),
+            in_progress: Arc::new(Mutex::new(false)),
         }
     }
 }
@@ -96,16 +99,19 @@ impl eframe::App for EncryptoInterface {
                     }
                     ui.label(&selected_text);
                     ui.label("  ");
-                    if toggle_ui(ui, &mut self.encryption_state).clicked(){
-                        println!("clicked");
-                        let encryption_key = Arc::new(self.encryption_key.clone());
-                        let path = Arc::new(self.path.clone());
-                        let mode = self.encryption_state;
+                    ui.add_enabled_ui(!self.in_progress.lock().unwrap().clone(), |ui| {
+                        if toggle_ui(ui, &mut self.encryption_state).clicked(){
+                            println!("clicked");
+                            let encryption_key = Arc::new(self.encryption_key.clone());
+                            let path = Arc::new(self.path.clone());
+                            let mode = self.encryption_state;
 
-                        thread::spawn(move || {
-                            pack_n_encrypt(&path, mode, encryption_key);
-                        });
-                    }
+                            let arc_lock = Arc::clone(&self.in_progress);
+                            thread::spawn(move || {
+                                pack_n_encrypt(&path, mode, encryption_key, arc_lock);
+                            });
+                        }
+                    });
                     ui.label("  ");
                 });
 

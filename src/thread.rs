@@ -21,11 +21,13 @@ struct FileInfo {
     size: u64,
 }
 
-pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -> Option<bool> {
+pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>, lock: Arc<Mutex<bool>>) -> bool {
+    *lock.lock().unwrap() = true;
     let directory_path = Path::new(path_str);
     if !directory_path.exists() {
         println!("Error: Directory does not exist.");
-        return Some(false);
+        *lock.lock().unwrap() = false;
+        return false;
     }
     
     let encrypted_file_name = "files.encrypto";
@@ -37,17 +39,21 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         collect_file_info(directory_path, &mut file_infos, encrypted_file_name).unwrap();
         if file_infos.len()==0 {
             println!("No files to encrypt!");
-            return Some(false);
+            *lock.lock().unwrap() = false;
+            return false;
         }
 
         let header = get_raw_file_info(&file_infos);
         let file_infos_copy: Vec<FileInfo> = file_infos.clone();
-
+        let mut result = false;
         let start_time = Instant::now();
-        encrypt_files(encrypted_file_path.clone(), encryption_key.clone(), file_infos, header);
+        if !result {} // going around a warning ;)
+        result = encrypt_files(encrypted_file_path.clone(), encryption_key.clone(), file_infos, header);
         let end_time = Instant::now();
         let elapsed_time = end_time.duration_since(start_time);
         println!("Time taken: {:?}", elapsed_time);
+
+        if !result { println!("Error encrypting!"); *lock.lock().unwrap() = false; return false;}
         
         delete_files(file_infos_copy);
     }
@@ -55,7 +61,8 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         //check if file exists
         if fs::metadata(encrypted_file_path.clone()).is_err() {
             println!("Encrypted file does not exist!");
-            return Some(false)
+            *lock.lock().unwrap() = false;
+            return false
         }
 
         //read header for header size
@@ -63,24 +70,27 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         //collect info
         let mut file_infos: Vec<FileInfo> = Vec::new();
         collect_info_from_header(encrypted_file_path.clone(), encryption_key.clone(), &mut file_infos, &mut header_len);
-        println!("{:?}", file_infos);
-        
+        let mut result = false;
+        if !result {} // going around a warning ;)
         //decrypt files
         let start_time = Instant::now();
-        decrypt_files(encrypted_file_path.clone(), encryption_key.clone(), file_infos, header_len);
+        result = decrypt_files(encrypted_file_path.clone(), encryption_key.clone(), file_infos, header_len);
         let end_time = Instant::now();
         let elapsed_time = end_time.duration_since(start_time);
         println!("Time taken: {:?}", elapsed_time);
        
+        if !result { println!("Error decrypting!"); *lock.lock().unwrap() = false; return false;}
+        
         match fs::remove_file(encrypted_file_path.clone()) {
             Ok(_) => println!("File deleted successfully {:?}", encrypted_file_path.clone()),
             Err(e) => println!("Error deleting file: {}", e),
         }
     }
 
-    return Some(true)
+    *lock.lock().unwrap() = false;
+    return true;
 }
-fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>, header_len: u64) -> Option<bool> {
+fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>, header_len: u64) -> bool {
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
     let num_threads = num_cpus::get();
@@ -198,9 +208,9 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
 
     thread_manager.join();
     saver_thread_manager.join();
-    println!("finished decrypt");
+    println!("Finished Decrypt");
 
-    Some(true)
+    true
 }
 fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>, output_file_name: &str) -> Result<(), std::io::Error> {
     for entry in fs::read_dir(path)? {
@@ -281,7 +291,7 @@ fn string_to_key(s: &str) -> [u8; 32] {
     return key;
 }
 
-fn encrypt_files(output_file_path: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>, header: Vec<u8>) -> Option<bool> {
+fn encrypt_files(output_file_path: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>, header: Vec<u8>) -> bool {
     
     let key = string_to_key(encryption_key.as_str());
     let cipher = Aes256::new_from_slice(&key);
@@ -413,9 +423,9 @@ fn encrypt_files(output_file_path: PathBuf, encryption_key: Arc<String>, file_in
 
     thread_manager.join();
     saver_thread_manager.join();
-    println!("finished encrypt");
+    println!("Finished Encrypt");
     
-    Some(true)
+    true
 }
 fn get_header_len(input_file: PathBuf, encryption_key: Arc<String>) -> u64 {
 
