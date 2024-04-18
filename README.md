@@ -4,7 +4,9 @@
 [![Apache](https://img.shields.io/badge/license-Apache-blue.svg)](https://github.com/Bombinisss/Encrypto/blob/master/LICENSE-APACHE.txt) [![Build Status](https://github.com/bombinisss/encrypto/actions/workflows/rust.yml/badge.svg)](https://github.com/bombinisss/encrypto/actions?workflow=Rust)
 
 
-Simple app written in rust for encrypting and decrypting specified directory.
+Windows app written in rust for encrypting and decrypting all files in specified directory.
+
+Very FAST up to 2000 MB/S, RAM usage beetween 50MB and 2,5GB depends on how many and how large the files are - Achieved through multithreading.
 
 ### Dependencies
 
