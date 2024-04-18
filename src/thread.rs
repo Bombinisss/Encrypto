@@ -96,7 +96,7 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
     let num_threads = num_cpus::get();
 
     let thread_manager = ThreadManager::<()>::new(num_threads-1);
-    let saver_thread_manager = ThreadManager::<()>::new(num_threads/2);
+    let saver_thread_manager = ThreadManager::<()>::new(1);
     let mut header_len_mod = header_len;
     
     for file in file_infos {
@@ -203,7 +203,8 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
                 sleep(Duration::from_millis(10))
             }
         }
-        header_len_mod+=file.size;
+        let temp_size = (div_up(file.size as usize, 16) as u64) * 16;
+        header_len_mod+=temp_size;
     }
 
     thread_manager.join();
@@ -298,7 +299,7 @@ fn encrypt_files(output_file_path: PathBuf, encryption_key: Arc<String>, file_in
     let num_threads = num_cpus::get();
 
     let thread_manager = ThreadManager::<()>::new(num_threads-1);
-    let saver_thread_manager = ThreadManager::<()>::new(num_threads/2);
+    let saver_thread_manager = ThreadManager::<()>::new(1);
 
     // Splitting header into 16-byte parts
     let mut parts: Vec<GenericArray<u8, U16>> = header
