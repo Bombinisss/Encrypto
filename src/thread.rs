@@ -72,10 +72,10 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>) -
         let elapsed_time = end_time.duration_since(start_time);
         println!("Time taken: {:?}", elapsed_time);
        
-        /*match fs::remove_file(encrypted_file_path.clone()) {
+        match fs::remove_file(encrypted_file_path.clone()) {
             Ok(_) => println!("File deleted successfully {:?}", encrypted_file_path.clone()),
             Err(e) => println!("Error deleting file: {}", e),
-        }*/
+        }
     }
 
     return Some(true)
