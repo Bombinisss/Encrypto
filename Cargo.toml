@@ -6,26 +6,35 @@ edition = "2021"
 rust-version = "1.72"
 
 [dependencies]
-egui = "0.26.2"
-eframe = { version = "0.26.2", default-features = false, features = [
+egui = "0.27.2"
+eframe = { version = "0.27.2", default-features = false, features = [
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
-log = "0.4.20"
+log = "0.4.21"
 
 # You only need serde if you want app persistence:
-serde = { version = "1.0.197", features = ["derive"] }
+serde = { version = "1.0.198", features = ["derive"] }
 
-env_logger = "0.11.2"
+env_logger = "0.11.3"
 aes = "0.8.4"
 sha2 = "0.11.0-pre.3"
-egui-file-dialog = "0.4.0"
+egui-file-dialog = "0.5.0"
+num_cpus = "1.16"
+thread-manager = "1.0.0"
+array-macro = "2.1.8"
+
+[profile.release.package."*"]
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 3
 
 [profile.release]
 opt-level = 3
 
-[profile.dev.package."*"]
+[profile.dev]
 opt-level = 3
 
 [build-dependencies]
