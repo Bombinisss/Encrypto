@@ -62,9 +62,7 @@ impl eframe::App for EncryptoInterface {
                 rect.max.y = rect.min.y + title_bar_height;
                 rect
             };
-            ui.add_enabled_ui(!*self.in_progress.lock().unwrap(), |ui| {
-                title_bar_ui(ui, title_bar_rect, "Encrypto");
-            });
+            title_bar_ui(ui, title_bar_rect, "Encrypto", self);
             // The top panel is often a good place for a menu bar:
 
             egui::menu::bar(ui, |ui| {
@@ -173,7 +171,7 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
     });
 }
 
-fn title_bar_ui(ui: &mut egui::Ui, title_bar_rect: eframe::epaint::Rect, title: &str) {
+fn title_bar_ui(ui: &mut egui::Ui, title_bar_rect: eframe::epaint::Rect, title: &str, x: &mut EncryptoInterface) {
     use egui::*;
 
     let painter = ui.painter();
@@ -205,7 +203,10 @@ fn title_bar_ui(ui: &mut egui::Ui, title_bar_rect: eframe::epaint::Rect, title: 
             ui.spacing_mut().item_spacing.x = 0.0;
             ui.visuals_mut().button_frame = false;
             ui.add_space(8.0);
-            close_maximize_minimize(ui);
+            
+            ui.add_enabled_ui(!*x.in_progress.lock().unwrap(), |ui| {
+                close_maximize_minimize(ui);
+            });
         });
     });
 }

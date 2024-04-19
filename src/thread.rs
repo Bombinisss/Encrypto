@@ -195,8 +195,7 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
                     let start_index = i * 16;
                     finished_array[start_index..start_index + 16].copy_from_slice(&blocks_16[i]);
                 }
-
-                //thread_shared_map2.lock().unwrap().insert(i_clone as u64, *finished_array); // STACK OVERFLOW HERE
+                
                 thread_shared_map2.lock().unwrap().insert(i_clone as u64, finished_array);
             });
             while thread_manager.job_queue() > 10000000 {
@@ -413,7 +412,6 @@ fn encrypt_files(output_file_path: PathBuf, encryption_key: Arc<String>, file_in
                     finished_array[start_index..start_index + 16].copy_from_slice(&blocks_16[i]);
                 }
                 
-                //thread_shared_map2.lock().unwrap().insert(i_clone as u64, *finished_array); // STACK OVERFLOW HERE
                 thread_shared_map2.lock().unwrap().insert(i_clone as u64, finished_array);
             });
             while thread_manager.job_queue() > 10000000 {
