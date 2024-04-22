@@ -134,6 +134,7 @@ impl eframe::App for EncryptoInterface {
 
                 if let Some(path) = self.file_dialog.update(ctx).selected() {
                     self.path = path.to_str().unwrap_or_else(|| "Error: Invalid path").to_string();
+                    self.path = self.path[4..].to_string();
                 }
             });
 
