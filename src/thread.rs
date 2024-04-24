@@ -258,13 +258,37 @@ fn get_raw_file_info(file_infos: &[FileInfo]) -> Vec<u8> {
     
     return header_with_size_bytes;
 }
+fn overwrite_with_zeros(file_info: FileInfo) -> io::Result<()> {
+    // Open the file in write-only mode, truncating it if it already exists.
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(file_info.path)?;
+    
+    let buffer_size = 560000;
+    let buffer = vec![0; buffer_size];
+    
+    let mut bytes_written: u64 = 0;
+    while bytes_written < file_info.size {
+        let bytes_to_write = std::cmp::min(buffer_size as u64, file_info.size - bytes_written);
+        file.write_all(&buffer[0..bytes_to_write as usize])?;
+        bytes_written += bytes_to_write;
+    }
 
+    Ok(())
+}
 fn delete_files(file_infos: Vec<FileInfo>) -> bool{
     let mut result = true;
     for file_info in file_infos {
-        let r = fs::remove_file(file_info.path);
+        let r = overwrite_with_zeros(file_info.clone());
+        let r2 = fs::remove_file(file_info.path);
         
         if r.is_err()
+        {
+            println!("Error 0`ing file");
+            result = false;
+        }
+        if r2.is_err()
         {
             println!("Error deleting file");
             result = false;
