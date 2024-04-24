@@ -111,6 +111,10 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
             let temp_file_path = output_file.clone();
             let mut counter: u64 = 0;
             let file_size_copy = file.size.clone();
+            //ensure dir exists
+            if let Some(parent_dir) = Path::new(&temp_file_path.clone()).parent() {
+                std::fs::create_dir_all(parent_dir).unwrap();
+            }
             // Open the file in append mode, creating it if it doesn't exist.
             let mut file = OpenOptions::new()
                 .create(true)
@@ -362,6 +366,10 @@ fn encrypt_files(output_file_path: PathBuf, encryption_key: Arc<String>, file_in
             let temp_file_path = output_file_copy.clone();
             let mut counter: u64 = 0;
             let file_size_copy = file.size.clone();
+            //ensure dir exists
+            if let Some(parent_dir) = Path::new(&temp_file_path.clone()).parent() {
+                std::fs::create_dir_all(parent_dir).unwrap();
+            }
             // Open the file in append mode, creating it if it doesn't exist.
             let mut file = OpenOptions::new()
                 .create(true)
