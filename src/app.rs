@@ -274,7 +274,7 @@ pub fn toggle_ui(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
     }
 
     // Attach some meta-data to the response which can be used by screen readers:
-    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, *on, ""));
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, *on, false,""));
 
     // 4. Paint!
     // Make sure we need to paint:

@@ -22,6 +22,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Encrypto",
         native_options,
-        Box::new(|cc| Box::new(encrypto::EncryptoInterface::new(cc))),
+        Box::new(|cc| Ok(Box::new(encrypto::EncryptoInterface::new(cc)))),
     )
 }
