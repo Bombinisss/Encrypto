@@ -81,7 +81,7 @@ impl eframe::App for EncryptoInterface {
                 ui.add_space(16.0);
 
 
-                egui::widgets::global_dark_light_mode_buttons(ui);
+                egui::widgets::global_theme_preference_buttons(ui);
             });
         });
 
@@ -198,8 +198,9 @@ fn title_bar_ui(ui: &mut egui::Ui, title_bar_rect: eframe::epaint::Rect, title: 
     if title_bar_response.is_pointer_button_down_on() {
         ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
     }
-
-    ui.allocate_ui_at_rect(title_bar_rect, |ui| {
+    
+    let ui_builder = UiBuilder::new().max_rect(title_bar_rect); // Set the max_rect to the title bar rect
+    ui.allocate_new_ui(ui_builder, |ui| {
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             ui.visuals_mut().button_frame = false;

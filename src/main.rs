@@ -1,6 +1,8 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(debug_assertions, windows_subsystem = "console")]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+use eframe::HardwareAcceleration;
+
 fn main() -> eframe::Result<()> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
@@ -15,9 +17,20 @@ fn main() -> eframe::Result<()> {
                     .unwrap(),
             )
             .with_resizable(true),
-        follow_system_theme:
-            true,
-        ..Default::default()
+        vsync: false,
+        multisampling: 0,
+        depth_buffer: 0,
+        stencil_buffer: 0,
+        hardware_acceleration: HardwareAcceleration::Required,
+        renderer: Default::default(),
+        dithering: true,
+        run_and_return: false,
+        event_loop_builder: None,
+        window_builder: None,
+        shader_version: None,
+        centered: false,
+        persist_window: false,
+        persistence_path: None,
     };
     eframe::run_native(
         "Encrypto",

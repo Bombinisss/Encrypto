@@ -1,27 +1,26 @@
 [package]
 name = "encrypto"
-version = "0.1.0"
+version = "1.2.0"
 authors = ["Bombini"]
 edition = "2021"
 rust-version = "1.79"
 
 [dependencies]
-egui = "0.28.1"
-eframe = { version = "0.28.1", default-features = false, features = [
+egui = "0.29.1"
+eframe = { version = "0.29.1", default-features = false, features = [
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
-log = "0.4.21"
 
 # You only need serde if you want app persistence:
-serde = { version = "1.0.198", features = ["derive"] }
+serde = { version = "1.0.215", features = ["derive"] }
 
-env_logger = "0.11.3"
+env_logger = "0.11.5"
 aes = "0.8.4"
-sha2 = "0.11.0-pre.3"
-egui-file-dialog = "0.6.0"
-num_cpus = "1.16"
+sha2 = "0.11.0-pre.4"
+egui-file-dialog = "0.7.0"
+num_cpus = "1.16.0"
 thread-manager = "1.0.0"
 array-macro = "2.1.8"
 

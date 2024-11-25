@@ -88,7 +88,7 @@ pub fn pack_n_encrypt(path_str: &str, mode: bool, encryption_key: Arc<String>, l
     }
 
     *lock.lock().unwrap() = false;
-    return true;
+    true
 }
 fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>, header_len: u64) -> bool {
     let key = string_to_key(encryption_key.as_str());
@@ -113,7 +113,7 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
             let file_size_copy = file.size.clone();
             //ensure dir exists
             if let Some(parent_dir) = Path::new(&temp_file_path.clone()).parent() {
-                std::fs::create_dir_all(parent_dir).unwrap();
+                fs::create_dir_all(parent_dir).unwrap();
             }
             // Open the file in append mode, creating it if it doesn't exist.
             let mut file = OpenOptions::new()
@@ -216,7 +216,7 @@ fn decrypt_files(input_path: PathBuf, encryption_key: Arc<String>, file_infos: V
 
     true
 }
-fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>, output_file_name: &str) -> Result<(), std::io::Error> {
+fn collect_file_info(path: &Path, file_infos: &mut Vec<FileInfo>, output_file_name: &str) -> Result<(), io::Error> {
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let metadata = fs::metadata(&entry.path())?; // Get metadata for each entry
@@ -260,7 +260,7 @@ fn get_raw_file_info(file_infos: &[FileInfo]) -> Vec<u8> {
     let mut header_with_size_bytes: Vec<u8> = Vec::from((header.len() as u64).to_be_bytes()); // 8 bytes (u64)
     header_with_size_bytes.extend_from_slice(header.as_slice());
     
-    return header_with_size_bytes;
+    header_with_size_bytes
 }
 fn overwrite_with_zeros(file_info: FileInfo) -> io::Result<()> {
     // Open the file in write-only mode, truncating it if it already exists.
@@ -300,7 +300,7 @@ fn delete_files(file_infos: Vec<FileInfo>) -> bool{
     }
 
     println!("Files deleted successfully");
-    return result;
+    result
 }
 fn string_to_key(s: &str) -> [u8; 32] {
     // Create SHA-256 hasher
@@ -316,7 +316,7 @@ fn string_to_key(s: &str) -> [u8; 32] {
     let mut key = [0u8; 32];
     key.copy_from_slice(&result[..]);
 
-    return key;
+    key
 }
 
 fn encrypt_files(output_file_path: PathBuf, encryption_key: Arc<String>, file_infos: Vec<FileInfo>, header: Vec<u8>) -> bool {
@@ -368,7 +368,7 @@ fn encrypt_files(output_file_path: PathBuf, encryption_key: Arc<String>, file_in
             let file_size_copy = file.size.clone();
             //ensure dir exists
             if let Some(parent_dir) = Path::new(&temp_file_path.clone()).parent() {
-                std::fs::create_dir_all(parent_dir).unwrap();
+                fs::create_dir_all(parent_dir).unwrap();
             }
             // Open the file in append mode, creating it if it doesn't exist.
             let mut file = OpenOptions::new()
@@ -485,7 +485,7 @@ fn get_header_len(input_file: PathBuf, encryption_key: Arc<String>) -> u64 {
         }
     }
     
-    return result;
+    result
 }
 fn read_file_info(file_infos: &mut Vec<FileInfo>, data: &[u8]) {
     let mut cursor = Cursor::new(data);
@@ -588,7 +588,7 @@ fn collect_info_from_header(input_file: PathBuf, encryption_key: Arc<String>, fi
     
     read_file_info(file_infos, &merged_header);
 }
-fn append_x_to_file16(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) -> std::io::Result<()> {
+fn append_x_to_file16(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) -> io::Result<()> {
     // Open the file in append mode, creating it if it doesn't exist.
     let mut file = OpenOptions::new()
         .create(true)
@@ -597,7 +597,7 @@ fn append_x_to_file16(filename: PathBuf, data: GenericArray<u8, U16>, x: usize) 
 
     if x!=16 {
         let mut temp = data.to_vec();
-        temp.truncate(x as usize);
+        temp.truncate(x);
         file.write_all(&temp)?;
         return Ok(());
     }
@@ -615,5 +615,5 @@ pub fn div_up(a: usize, b: usize) -> usize {
         output=a/b;
         output+=1;
     }
-    return output;
+    output
 }
