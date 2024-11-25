@@ -3,7 +3,7 @@ name = "encrypto"
 version = "1.2.0"
 authors = ["Bombini"]
 edition = "2021"
-rust-version = "1.79"
+rust-version = "1.82"
 
 [dependencies]
 egui = "0.29.1"
